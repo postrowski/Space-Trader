@@ -1,0 +1,260 @@
+<table *ngIf="ship" class="th-right">
+	<!-- Registration -->
+	<tr *ngIf="ship.registration">
+		<th>Registration</th>
+		<td>
+			<table>
+				<tr>
+					<th>Faction Symbol</th>
+					<th>Role</th>
+				</tr>
+				<tr>
+					<td>{{ ship.registration.factionSymbol }}</td>
+					<td>{{ ship.registration.role }}</td>
+				</tr>
+			</table>
+		</td>
+	</tr>
+
+	<tr *ngIf="ship.nav">
+		<th>Navigation</th>
+		<td>
+			<table>
+				<tr>
+					<th>System Symbol</th>
+					<th>Waypoint Symbol</th>
+					<th>Route</th>
+					<th>Status</th>
+					<th>Flight Mode</th>
+				</tr>
+				<tr>
+					<td>{{ ship.nav.systemSymbol }}</td>
+					<td><span class="link" (click)="onWaypointSymbolClick(ship.nav.waypointSymbol)">{{ship.nav.waypointSymbol}}</span></td>
+					<td>
+						<span *ngIf="timeUntil(ship.nav.route.arrival) < 0">
+							At <app-waypoint-base [waypoint]="ship.nav.route.destination"></app-waypoint-base>
+						</span>
+						<span *ngIf="timeUntil(ship.nav.route.arrival) > 0">
+							<app-waypoint-base [waypoint]="ship.nav.route.origin"></app-waypoint-base> ->
+							<app-waypoint-base [waypoint]="ship.nav.route.destination"></app-waypoint-base><br/>
+								left at {{ ship.nav.route.departureTime }}, arriving at {{ ship.nav.route.arrival }}
+						</span>
+					</td>
+					<td>{{ ship.nav.status }}</td>
+					<td>{{ ship.nav.flightMode }}</td>
+				</tr>
+			</table>
+		</td>
+	</tr>
+	<tr>
+		<th><img src="assets\crew.png"><br />Crew</th>
+		<td>
+			<table>
+				<tr>
+					<th>Current</th>
+					<th>Capacity</th>
+					<th>Required</th>
+					<th>Rotation</th>
+					<th>Morale</th>
+					<th>Wages</th>
+				</tr>
+				<tr>
+					<td>{{ ship.crew.current }}</td>
+					<td>{{ ship.crew.capacity }}</td>
+					<td>{{ ship.crew.required }}</td>
+					<td>{{ ship.crew.rotation }}</td>
+					<td>{{ ship.crew.morale }}</td>
+					<td>{{ ship.crew.wages | currency : 'USD' : 'symbol' :
+						'1.0-0'}}</td>
+				</tr>
+			</table>
+		</td>
+	</tr>
+	<tr *ngIf="ship.fuel">
+		<th>Fuel<br/>({{ ship.frame.fuelCapacity }} max.)</th>
+		<td>
+			{{ ship.fuel.current }} / {{ ship.fuel.capacity }} as of {{ ship.fuel.consumed.timestamp }}
+		</td>
+	</tr>
+	<tr *ngIf="ship.cooldown">
+		<th>Cooldown</th>
+		<td>
+			<table>
+				<tr>
+					<th>Total Seconds</th>
+					<th>Remaining Seconds</th>
+				</tr>
+				<tr>
+					<td>{{ ship.cooldown.totalSeconds }}</td>
+					<td>{{ ship.cooldown.remainingSeconds }}</td>
+				</tr>
+			</table>
+		</td>
+	</tr>
+	<tr>
+		<th>Frame</th>
+		<td>
+			<table>
+				<tr>
+					<th>Symbol</th>
+					<th>Name</th>
+					<th>Description</th>
+					<th>Condition</th>
+					<th>Requirements</th>
+				</tr>
+				<tr>
+					<td>{{ ship.frame.symbol }}</td>
+					<td>{{ ship.frame.name }}</td>
+					<td>{{ ship.frame.description }}</td>
+					<td>{{ ship.frame.condition }}</td>
+					<td><app-requirements [requirements]="ship.frame.requirements"></app-requirements></td>
+				</tr>
+			</table>
+		</td>
+	</tr>
+	<!-- Reactor -->
+	<tr>
+		<th><img src="assets\power.png"><br />Reactor</th>
+		<td>
+			<table>
+				<tr>
+					<th>Symbol</th>
+					<th>Name</th>
+					<th>Description</th>
+					<th>Condition</th>
+					<th>Power Output <img src="assets\power.png" height="16"></th>
+					<th>Requirements</th>
+				</tr>
+				<tr>
+					<td>{{ ship.reactor.symbol }}</td>
+					<td>{{ ship.reactor.name }}</td>
+					<td>{{ ship.reactor.description }}</td>
+					<td>{{ ship.reactor.condition }}</td>
+					<td>{{ ship.reactor.powerOutput }}</td>
+					<td><app-requirements
+							[requirements]="ship.reactor.requirements"></app-requirements></td>
+				</tr>
+			</table>
+		</td>
+	</tr>
+
+	<!-- Engine -->
+	<tr>
+		<th>Engine</th>
+		<td>
+			<table>
+				<tr>
+					<th>Symbol</th>
+					<th>Name</th>
+					<th>Description</th>
+					<th>Condition</th>
+					<th>Speed</th>
+					<th>Requirements</th>
+				</tr>
+				<tr>
+					<td>{{ ship.engine.symbol }}</td>
+					<td>{{ ship.engine.name }}</td>
+					<td>{{ ship.engine.description }}</td>
+					<td>{{ ship.engine.condition }}</td>
+					<td>{{ ship.engine.speed }}</td>
+					<td><app-requirements
+							[requirements]="ship.engine.requirements"></app-requirements></td>
+				</tr>
+			</table>
+		</td>
+	</tr>
+	<!-- Modules -->
+	<tr>
+		<th>Modules<br/>
+			({{ ship.frame.moduleSlots }} slots)
+		</th>
+		<td>
+			<table>
+				<tr>
+					<th style="text-align: center; width: 200px">Module</th>
+					<th style="text-align: center; width: 400px">Details</th>
+				</tr>
+				<tr *ngFor="let module of ship.modules; let first = first;">
+					<td [ngClass]="{ 'selected-row': module === selectedModule }"
+						(click)="showModuleDetails(module)">{{module.name }}</td>
+					<td [attr.rowspan]="ship.modules.length" *ngIf="first"
+						class="selected-row">
+						<div class="module-detail">
+							<strong>Symbol:</strong> {{ selectedModule?.symbol }}
+						</div>
+						<div class="module-detail">
+							<strong>Description:</strong> {{ selectedModule?.description }}
+						</div>
+						<div class="module-detail" *ngIf="selectedModule?.capacity">
+							<strong>Capacity:</strong> {{ selectedModule?.capacity }}
+						</div>
+						<div class="module-detail" *ngIf="selectedModule?.range">
+							<strong>Range:</strong> {{ selectedModule?.range }}
+						</div>
+						<div class="module-detail" *ngIf="selectedModule">
+							<strong>Requirements:</strong>
+							<app-requirements [requirements]="selectedModule.requirements"></app-requirements>
+						</div>
+					</td>
+				</tr>
+			</table>
+		</td>
+	</tr>
+
+	<!-- Mounts -->
+	<tr>
+		<th>Mounts<br/>
+			({{ ship.frame.mountingPoints }} slots)</th>
+		<td>
+			<table>
+				<tr>
+					<th style="text-align: center; width: 200px">Mount</th>
+					<th style="text-align: center; width: 400px">Details</th>
+				</tr>
+				<tr *ngFor="let mount of ship.mounts; let first = first;">
+					<td [ngClass]="{ 'selected-row': mount === selectedMount }"
+						(click)="showMountDetails(mount)">{{mount.name }}</td>
+					<td [attr.rowspan]="ship.mounts.length" *ngIf="first"
+						class="selected-row">
+						<div class="mount-detail">
+							<strong>Symbol:</strong> {{ selectedMount?.symbol }}
+						</div>
+						<div class="mount-detail">
+							<strong>Description:</strong> {{ selectedMount?.description }}
+						</div>
+						<div class="mount-detail" *ngIf="selectedMount?.strength">
+							<strong>Strength:</strong> {{ selectedMount?.strength }}
+						</div>
+						<div class="mount-detail" *ngIf="selectedMount?.deposits">
+							<strong>Deposits:</strong> {{ selectedMount?.deposits?.join(', ')
+							}}
+						</div>
+						<div class="mount-detail" *ngIf="selectedMount">
+							<strong>Requirements:</strong>
+							<app-requirements [requirements]="selectedMount.requirements"></app-requirements>
+						</div>
+					</td>
+				</tr>
+			</table>
+		</td>
+	</tr>
+
+	<!-- Cargo -->
+	<tr *ngIf="ship.cargo">
+		<th>Cargo</th>
+		<td>
+			<table>
+				<tr>
+					<th>Capacity</th>
+					<th>Units</th>
+				</tr>
+				<tr>
+					<td>{{ ship.cargo.capacity }}</td>
+					<td>{{ ship.cargo.units }}</td>
+				</tr>
+			</table>
+		</td>
+	</tr>
+
+	<!-- Add similar rows for other properties as needed -->
+</table>

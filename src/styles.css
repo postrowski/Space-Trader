@@ -1,1 +1,85 @@
 /* You can add global styles to this file, and also import other style files */
+table {
+	border: 1px solid black;
+	border-collapse: collapse;
+}
+
+.link {
+	text-decoration: underline;
+	cursor: pointer;
+	color: blue;
+}
+
+.refresh-button {
+	margin: 0px;
+	padding: 0px;
+	border: 0px;
+}
+
+ul {
+	list-style: none;
+	padding: 10px;
+	margin: 0px;
+}
+
+html, body {
+	height: 100%;
+}
+
+body {
+	margin: 0;
+	font-family: Roboto, "Helvetica Neue", sans-serif;
+}
+
+/* Adjust the z-index of the dragged item */
+.cdk-drag-preview {
+	z-index: 9999; /* This needs to be higher than the modal's z-index */
+}
+
+/* MODAL STYLES */
+app-modal {
+	/* modals are hidden by default */
+	display: none;
+}
+
+app-modal .app-modal {
+	/* modal container fixed across the whole screen */
+	position: fixed;
+	inset: 0;
+	/* z-index must be higher than everything else on the page */
+	/*    z-index: 9000;*/
+	/* semi-transparent black background exposed by padding */
+	background-color: rgba(0, 0, 0, 0.75);
+	padding: 40px;
+	/* enables scrolling for tall modals */
+	overflow: auto;
+}
+
+app-modal .app-modal-body {
+	padding: 20px;
+	background: #fff;
+}
+
+body.app-modal-open {
+	/* body overflow is hidden to hide the main scrollbar when the modal window is open */
+	overflow: hidden;
+}
+
+.text-container {
+	display: flex;
+	justify-content: space-between;
+	/* This pushes the inner divs to each side */
+}
+
+button {
+	color: black;
+	border-radius: 5px;
+	background-color: #E0E0E0;
+	border-color: black;
+}
+
+button[enabled=false] {
+	color: grey;
+	background-color: #F0F0F0;
+	border-color: #BBBBBB;
+}

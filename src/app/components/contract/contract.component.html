@@ -1,0 +1,43 @@
+<table *ngIf="contract">
+	<tr>
+		<th>Payment</th>
+		<td>
+			On Accepted:{{contract.terms.payment.onAccepted | currency : 'USD' : 'symbol' : '1.0-0'}}<br/>
+			On Fulfilled:{{contract.terms.payment.onFulfilled | currency : 'USD' : 'symbol' : '1.0-0'}}
+		</td>
+	</tr>
+	<tr>
+	<th>Deliveries</th>
+	<td class='delivery-cell'>
+		<ng-container *ngFor="let delivery of contract.terms.deliver">
+			<app-waypoint-base [waypointSymbol]="delivery.destinationSymbol"></app-waypoint-base>
+			<app-vertical-progress-bar
+				[title]="delivery.tradeSymbol"
+				[value]="delivery.unitsFulfilled"
+				[threshold]="0" [maxValue]="delivery.unitsRequired"></app-vertical-progress-bar>
+		</ng-container>
+		<button (click)="onDeliver()">Deliver</button>
+	 </td>
+	</tr>
+	<tr>
+		<th>Accepted</th>
+		<td>{{ contract.accepted ? 'Yes' : 'No' }}
+			<div *ngIf="!contract.accepted">
+				<app-countdown title="Accept by"
+					[endTimeStr]="contract.deadlineToAccept"></app-countdown>&nbsp;
+				<button (click)="onAcceptContract()">Accept Contract</button>&nbsp;
+			</div>
+		</td>
+	</tr>
+	<tr>
+		<th>Fulfilled</th>
+		<td>{{ contract.fulfilled ? 'Yes' : 'No' }}
+		<div *ngIf="!contract.fulfilled">
+			<app-countdown title="deadline"
+				[endTimeStr]="contract.terms.deadline"></app-countdown>&nbsp;
+			<button (click)="onFulfill()">Fulfill</button>
+		</div>
+		</td>
+	</tr>
+</table>
+

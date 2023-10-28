@@ -1,0 +1,45 @@
+.header {
+	display: flex;
+	justify-content: space-between;
+	/* This pushes the inner divs to each side */
+}
+
+.selected-row {
+	background-color: #d0ffd0;
+}
+
+.selected-ship {
+	background-color: #ffd0d0;
+}
+
+.selected-cargo {
+	background-color: #d0ffd0;
+}
+
+.import {
+	background-color: #DDFFDD;
+}
+
+.export {
+	background-color: #DDDDFF;
+}
+
+.import, .export {
+	padding: 2px;
+	border: 1px solid black;
+	border-radius: 5px;
+	white-space: nowrap;
+	font-size: x-small;
+}
+
+td {
+	padding-right:10px;
+}
+
+td.numeric {
+	text-align: right;
+}
+
+td.centered {
+	text-align: center;
+}

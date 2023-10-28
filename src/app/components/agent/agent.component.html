@@ -1,0 +1,42 @@
+<h2>Agent</h2>
+<div *ngIf='!accountService.accountValid'>
+	<input [(ngModel)]='userName'>
+	<select id="shipSelect" [(ngModel)]="selectedFaction">
+		<option [ngValue]="null">Select a Faction</option>
+		<option *ngFor="let faction of factions" 
+		        [ngValue]="faction">{{faction.name}}</option>
+	</select>
+	<button (click)="onRegisterAccount()" [attr.enabled]='selectedFaction'>Register</button>
+</div>
+	<button (click)="onDeleteDataBase()">Delete Database</button>
+<div *ngIf='accountService.accountValid'>
+	<button (click)="accountService.fetchAgent()" class="refresh-button">
+		<img src="assets/refresh.png" height="16"/>
+	</button>
+	<table>
+		<tr>
+			<th>Token</th>
+			<td style="font-size:5px">{{accountService.token}}</td>
+		</tr>
+		<tr *ngIf='accountService.accountValid'>
+			<th>Account ID</th>
+			<td>{{agent?.accountId}}</td>
+		</tr>
+		<tr *ngIf='accountService.accountValid'>
+			<th>Symbol</th>
+			<td>{{agent?.symbol}}</td>
+		</tr>
+		<tr *ngIf='accountService.accountValid'>
+			<th>Headquarters</th>
+			<td>{{agent?.headquarters}}</td>
+		</tr>
+		<tr *ngIf='accountService.accountValid'>
+			<th>Credits</th>
+			<td>{{agent?.credits | currency : 'USD' : 'symbol' : '1.0-0'}}</td>
+		</tr>
+		<tr *ngIf='accountService.accountValid'>
+			<th>Starting Faction</th>
+			<td>{{agent?.startingFaction}}</td>
+		</tr>
+	</table>
+</div>

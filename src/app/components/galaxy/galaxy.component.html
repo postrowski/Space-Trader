@@ -1,0 +1,49 @@
+<table>
+	<tr>
+		<td class="systems-col">
+			<button (click)="update()" class="refresh-button">
+				<img src="assets/refresh.png" height="16" />
+			</button>
+			<br/>
+			Nearest <input type="number" [(ngModel)]="nearbySystemCount" (change)="onNearestCountChange()"> 
+			systems to <input [(ngModel)]="centerSystemStr" (change)="onNearbySystemsChange()"
+					[attr.class]="centerSystem ? 'system-valid' : ''">
+			<br/>
+			<span *ngIf="message">{{message}}</span>
+			<table *ngIf="centerSystem">
+				<tr>
+					<th>System</th>
+					<th>Type</th>
+					<th colspan="5"></th>
+					<th>Distance</th>
+					<th>Ships</th>
+				</tr>
+				<tr *ngFor="let system of nearbySystems"
+				    [ngClass]="{ 'selected-row': system === selectedSystem }"
+					(click)="onSelectSystem(system)"
+					(dblclick)="onDoubleClickSystem(system)">
+					<td>{{system.symbol}}</td>
+					<td><span class="system-info">{{system.type.toLowerCase().replace('_', ' ')}}</span></td>
+					<td><span *ngIf="hasMarketplace(system)" class="marketplace">$</span></td>
+					<td><span *ngIf="hasShipyard(system)" class="shipyard">⚓</span></td>
+					<td><span *ngIf="hasJumpGate(system)" class="jumpgate">¤</span></td>
+					<td>
+						<span *ngIf="hasAsteroidField(system) && !hasAsteroidMarket(system)" class="asteroid"><img src="assets/Asteroid.png" height='16'></span>
+						<span *ngIf="hasAsteroidMarket(system)" class="asteroid"><img src="assets/AsteroidMarket.png" height='16'></span>
+					</td>
+					<td><span *ngIf="hasUncharted(system)" class="uncharted">?</span></td>
+					
+					<td>{{getDistance(system, centerSystem)}}</td>
+					<td>{{getShipCount(system)}}</td>
+				</tr>
+			</table>
+		</td>
+		
+		<td class="nav-col">
+			<button (click)="setShowGalaxy(true)" [attr.class]="galaxyService.showGalaxy ? 'buttonOn' : 'buttonOff'">Galactic Map</button>
+			<button (click)="setShowGalaxy(false)" [attr.class]="galaxyService.showGalaxy ? 'buttonOff' : 'buttonOn'">System Map</button><br/>
+			<app-galaxy-map [class.hidden]="!galaxyService.showGalaxy" [nearbyCenter]="centerSystem" [distance]="maxRange()"></app-galaxy-map>
+			<app-system-map *ngIf="!galaxyService.showGalaxy"></app-system-map>
+		</td>
+	</tr>
+</table>

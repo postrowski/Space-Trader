@@ -1,0 +1,104 @@
+<h1>Marketplace {{marketplace?.symbol}}</h1>
+<div class="text-container">
+	<div *ngIf="marketplace != null">
+
+		<div>
+			<h2>Trade Goods</h2>
+			<table>
+				<tr>
+					<th>Name</th>
+					<th>Type</th>
+					<th>Trade<br/>Volume</th>
+					<th>Supply</th>
+					<th>Purchase<br/>Price</th>
+					<th>Sell<br/>	Price</th>
+				</tr>
+				<tr *ngFor="let tradeGood of goods"
+				    [ngClass]="{ 'selected-row': tradeGood == selectedTradeItem }"
+					(click)="selectTradeItem(tradeGood)">
+					<td title="{{tradeGood.description}}">{{tradeGood.name}}</td>
+					<td class="centered">{{tradeGood.type}}</td>
+					<td class="numeric">{{tradeGood.tradeVolume}}</td>
+					<td class="centered">{{tradeGood.supply}}</td>
+					<td class="numeric">{{tradeGood.purchasePrice | currency : 'USD' : 'symbol' : '1.0-0'}}</td>
+					<td class="numeric">{{tradeGood.sellPrice | currency : 'USD' : 'symbol' : '1.0-0'}}</td>
+				</tr>
+			</table>
+			<div *ngIf="selectedTradeItem">
+				Qty:<input type="number" [(ngModel)]="buyTradeQty">
+				<button (click)="onBuyTrade()">buy</button>
+			</div>
+		</div>
+
+
+
+		<div *ngIf="marketplace.transactions">
+			<div (click)="showTransactions = !showTransactions" class="link">
+				<h2 *ngIf="showTransactions">Transactions</h2>
+				<h2 *ngIf="!showTransactions">Transactions...</h2>
+			</div>
+			
+			<table *ngIf="marketplace != null && showTransactions">
+				<tr>
+					<th>Waypoint Symbol</th>
+					<th>Ship Symbol</th>
+					<th>Trade Symbol</th>
+					<th>Type</th>
+					<th>Units</th>
+					<th>Price Per Unit</th>
+					<th>Total Price</th>
+					<th>Timestamp</th>
+				</tr>
+				<tr *ngFor="let transaction of marketplace.transactions">
+					<td>{{ transaction.waypointSymbol}}</td>
+					<td>{{ transaction.shipSymbol}}</td>
+					<td>{{ transaction.tradeSymbol}}</td>
+					<td>{{ transaction.type}}</td>
+					<td>{{ transaction.units}}</td>
+					<td>{{ transaction.pricePerUnit}}</td>
+					<td>{{ transaction.totalPrice}}</td>
+					<td>{{ transaction.timestamp}}</td>
+				</tr>
+			</table>
+		</div>
+		
+	</div>
+	<div>
+		Credits: {{account?.credits | currency : 'USD' : 'symbol' : '1.0-0'}}<br/>
+		Ships At Waypoint:
+		<table *ngFor="let ship of shipsAtWaypoint"
+			[ngClass]="{ 'selected-ship': ship == selectedShip }"
+			(click)="onSelectShip(ship)">
+			<tr>
+				<th>{{ship.symbol}}</th>
+				<td>
+					<app-countdown [title]="'Cooldown'" *ngIf="ship.cooldown" [cooldown]="ship.cooldown"></app-countdown>
+				</td>
+				<td>
+					<button *ngIf="ship.nav.status != 'DOCKED'"
+					       (click)="onDockShip(ship)">Dock</button>
+				</td>
+			</tr>
+			<tr>
+				<th>Name</th>
+				<th>Units</th>
+			</tr>
+			<tr *ngFor="let cargoItem of ship!.cargo.inventory"
+			    [ngClass]="{ 'selected-cargo': cargoItem == selectedCargoItem }"
+			    (click)="selectCargoItem(cargoItem)">
+				<td title="{{cargoItem.description}}">{{ cargoItem.name}}</td>
+				<td>{{cargoItem.units}}</td>
+				<td><button (click)="onSellAll(cargoItem)">Sell All</button></td>
+				<td><button (click)="onJettisonCargoItem(cargoItem)">Jettison</button></td>
+			</tr>
+			<tr>
+				<td>Empty spaces</td>
+				<td><b>{{ship.cargo.capacity - ship.cargo.units}}</b></td>
+			</tr>
+		</table>
+		<div *ngIf="selectedCargoItem != null">
+			<button (click)="onSellCargoItem()">Sell</button>
+			Qty:<input type="number" [(ngModel)]="sellTradeQty">
+		</div>
+	</div>
+</div>

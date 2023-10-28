@@ -1,0 +1,9 @@
+
+.ship-type {
+	background-color: #FFDDDD;
+	padding: 2px;
+	border: 1px solid black;
+	border-radius: 5px;
+	white-space: nowrap;
+	font-size: x-small;
+}

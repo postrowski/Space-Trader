@@ -1,0 +1,11 @@
+<table>
+	<tr>
+		<td class='title'>{{title}}</td>
+	</tr>
+	<tr>
+		<td>
+			<div [ngClass]="getClass()"
+				title="{{remainingSeconds}} seconds left out {{totalSeconds}} total.">{{remainingSeconds | timeFormat}}</div>
+		</td>
+	</tr>
+</table>

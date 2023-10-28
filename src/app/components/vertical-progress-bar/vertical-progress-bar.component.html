@@ -1,0 +1,18 @@
+<table>
+	<tr>
+		<td>{{title}}</td>
+	</tr>
+	<tr>
+		<td>
+			<div class="vertical-progress-container" [style.background-color]="bgColor"
+			    title="{{value}} of {{maxValue}}">
+				<div class="vertical-progress-bar" [style.height]="percentage + '%'"
+				          [style.background-color]="barColor">
+					<div class="progress-text" [style.color]="textColor">
+   					{{ value }}</div>
+				</div>
+			</div>
+		</td>
+	</tr>
+</table>
+

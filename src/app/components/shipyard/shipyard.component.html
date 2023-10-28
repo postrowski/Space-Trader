@@ -1,0 +1,75 @@
+<h1>Shipyard {{shipyard?.symbol}}</h1>
+<div class="text-container">
+	<div>
+		<h2>Ship Types:</h2>
+		<div *ngIf="shipyard != null">
+			<span *ngFor="let shipType of shipyard.shipTypes" class="ship-type">{{shipType.type}}</span>
+
+			<h2>Transactions</h2>
+			<table>
+				<tr>
+					<th>Waypoint Symbol</th>
+					<th>Ship Symbol</th>
+					<th>Price</th>
+					<th>Agent Symbol</th>
+					<th>Timestamp</th>
+				</tr>
+				<tr *ngFor="let transaction of shipyard.transactions">
+					<td>{{ transaction.waypointSymbol}}</td>
+					<td>{{ transaction.shipSymbol}}</td>
+					<td>{{ transaction.price}}</td>
+					<td>{{ transaction.agentSymbol}}</td>
+					<td>{{ transaction.timestamp}}</td>
+				</tr>
+			</table>
+
+			<div *ngIf="shipyard.ships?.length">
+				<h2>Ships:</h2>
+				<table>
+					<tr *ngFor="let ship of shipyard.ships">
+						<th><button (click)="onPurchaseShip(ship)">Buy Ship
+								{{ship.purchasePrice | currency : 'USD' : 'symbol' : '1.0-0'}}</button></th>
+						<td><app-shipyard-ship [ship]="ship"></app-shipyard-ship></td>
+					</tr>
+				</table>
+			</div>
+
+			<h2>Modificaiton Fee:</h2>
+			{{ shipyard.modificationsFee }}
+
+		</div>
+	</div>
+	<div>
+		Credits: {{account?.credits | currency : 'USD' : 'symbol' : '1.0-0'}}<br/>
+		Ships At Waypoint:
+		<table *ngFor="let ship of shipsAtWaypoint">
+			<tr>
+				<th>{{ship.symbol}}</th>
+				<td>
+					<app-countdown [title]="'Cooldown'" *ngIf="ship.cooldown" [cooldown]="ship.cooldown"></app-countdown>
+				</td>
+				<td>
+					<button *ngIf="ship.nav.status != 'DOCKED'"
+					       (click)="onDockShip(ship)">Dock</button>
+				</td>
+			</tr>
+			<tr>
+				<th>Name</th>
+				<th>Units</th>
+			</tr>
+			<tr *ngFor="let cargoItem of ship!.cargo.inventory">
+				<td title="{{cargoItem.description}}">{{ cargoItem.name}}</td>
+				<td>{{cargoItem.units}}</td>
+				<td *ngIf="cargoItem.symbol.startsWith('MOUNT')"><button (click)="onInstallMount(ship, cargoItem)">Install</button></td>
+			</tr>
+			<tr *ngFor="let mount of ship!.mounts">
+				<td title="{{mount.description}}">{{ mount.name}}</td>
+				<td><button (click)="onRemoveMount(ship, mount)">Remove</button></td>
+			</tr>
+			<tr>
+				<td>Empty spaces</td>
+				<td><b>{{ship.cargo.capacity - ship.cargo.units}}</b></td>
+			</tr>
+		</table>
+	</div>
+</div>

@@ -1,0 +1,21 @@
+th-right th{
+	text-align: right;
+}
+th {
+	border:1px solid red;
+	padding:3px;
+	margin:3px;
+}
+
+td{
+	border:1px solid red;
+	padding:3px;
+	margin:3px;
+}
+
+div.module-detail, div.mount-detail {
+	margin-bottom: 10px
+}
+.selected-row {
+  background-color: #e0e0e0;
+}

@@ -1,0 +1,34 @@
+<br/>
+<div [attr.class]="running ? 'running' : 'stopped'">
+	<table>
+		<tr>
+			<td class="wide">
+				{{running ? 'Running' : 'Stopped'}}
+				<button *ngIf="running" (click)="onStop()" title="Stop">
+					<img src="assets/Stop.png">
+				</button>
+				<button *ngIf="!running" title="Stopped" class='disabled'>
+					<img *ngIf="!running" src="assets/StopOff.png">
+				</button>
+				
+				<button *ngIf="!running" (click)="onStart()" title="Start">
+					<img src="assets/Start.png">
+				</button>
+				<button *ngIf="running" title="Start" class='disabled'>
+					<img *ngIf="running" src="assets/StartOff.png">
+				</button>
+				
+				<button *ngIf="!running" (click)="onStep()" title="Stop">
+					<img src="assets/Step.png">
+				</button>
+				<button *ngIf="running" title="Start" class='disabled'>
+					<img *ngIf="running" src="assets/StepOff.png">
+				</button>
+			</td>	
+
+			<td *ngFor="let time of automationService.executionTimes">
+				<div class="time">{{time}}</div>
+			</td>
+		</tr>
+	</table>
+</div>

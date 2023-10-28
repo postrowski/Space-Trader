@@ -1,0 +1,41 @@
+<h1>Jump Gate{{waypoint?.symbol}}</h1>
+<div class="text-container">
+<div>
+<h2>Exports</h2>
+<table *ngIf="jumpgate != null">
+	<tr>
+		<th>symbol</th>
+		<th>sectorSymbol</th>
+		<th>type</th>
+		<th>factionSymbol</th>
+		<th>x</th>
+		<th>y</th>
+		<th>distance</th>
+		<th></th>
+	</tr>
+	<tr *ngFor="let system of jumpgate.connectedSystems">
+		<td>{{system.symbol}}</td>
+		<td>{{system.sectorSymbol}}</td>
+		<td>{{system.type}}</td>
+		<td>{{system.factionSymbol}}</td>
+		<td>{{system.x}}</td>
+		<td>{{system.y}}</td>
+		<td>{{system.distance}}</td>
+		<td><button (click)="onJump(system)">Jump</button></td>
+	</tr>
+</table>
+</div>
+<div>
+	<div>
+		Ships at jump gate:
+		<table *ngFor="let ship of shipsAtWaypoint"
+			[ngClass]="{ 'selected-ship': ship == selectedShip }"
+			(click)="onSelectShip(ship)">
+			<tr>
+				<th>{{ship.symbol}}</th>
+			</tr>
+		</table>
+		
+	</div>
+</div>
+</div>

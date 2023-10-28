@@ -1,0 +1,27 @@
+<table *ngIf="ship" class="th-right">
+	<tr>
+		<td>
+		{{ ship.name }}<br/>
+		 {{ ship.frame.moduleSlots}} modules, 
+		 {{ ship.frame.mountingPoints}} mounts,
+		 {{ ship.frame.fuelCapacity}} fuel
+		 </td>
+		<td colspan="8">
+<span *ngFor="let module of ship.modules" class='module' 
+title='Symbol:     {{ module?.symbol }}
+Description: {{ module?.description }}
+Capacity:    {{ module?.capacity }}
+Range:       {{ module?.range }}'> {{module.name }}</span><br/>
+<span *ngFor="let mount of ship.mounts" class='mount'
+ title='Symbol:      {{ mount?.symbol }}
+Description: {{ mount?.description }}
+Strength:    {{ mount?.strength }}
+Deposits:    {{ mount?.deposits?.join(", ")'>{{mount.name }}</span>
+</td>
+	</tr>
+	<tr class="centered-tds">
+		<td title="{{ship.reactor.description}}">Reactor:{{ship.reactor.name}}, power:{{ship.reactor.powerOutput}}</td>
+		<td title="{{ship.engine.description}}">Engine:{{ship.engine.name}}, speed:{{ship.engine.speed}}</td>
+		<td>Crew: req:{{ship.crew.required}} / {{ship.crew.capacity}}</td>
+	</tr>
+</table>

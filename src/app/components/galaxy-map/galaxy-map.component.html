@@ -1,0 +1,168 @@
+<input type="checkbox" [(ngModel)]="autoLoadSystems" (change)="onAutoLoadSystemsChange()"> Autoload Systems
+<input type="checkbox" [(ngModel)]="showFactions"> Show Factions
+<svg id="galaxy-map-svg" [attr.width]="width" [attr.height]="height"
+	(mousedown)="onMouseDown($event)" 
+	(mousemove)="onMouseMove($event)" 
+	(mouseup)="onMouseUp($event)"
+	(mouseleave)="onMouseLeave($event)"
+	(mouseenter)="onMouseEnter($event)"
+	>
+  <!-- Add a black background -->
+  <rect x="0" y="0" [attr.width]="width" [attr.height]="height" fill="black"/>
+  
+  <!-- Draw the background grid -->
+  <line stroke="#444" stroke-width="2"  
+					[attr.x1]="xOffset" [attr.y1]="yOffset - 9*10000*scale"
+					[attr.x2]="xOffset" [attr.y2]="yOffset + 9*10000*scale"/>
+  <line *ngFor="let x of [-8, -7, -6, -5, -4, -3, -2, -1, 1, 2, 3, 4, 5, 6, 7, 8]"
+					[attr.x1]="xOffset + (x * 10000 * scale)" [attr.y1]="yOffset - 90000*scale"
+					[attr.x2]="xOffset + (x * 10000 * scale)" [attr.y2]="yOffset + 90000*scale"
+					stroke="#444" stroke-width="1" />
+         
+  <line stroke="#444" stroke-width="2"  
+					[attr.x1]="xOffset - 9*10000*scale" [attr.y1]="yOffset"
+					[attr.x2]="xOffset + 9*10000*scale" [attr.y2]="yOffset"/>
+  <line *ngFor="let y of [-8, -7, -6, -5, -4, -3, -2, -1, 1, 2, 3, 4, 5, 6, 7, 8]"
+					[attr.x1]="xOffset - 9*10000*scale"   [attr.y1]="yOffset + (y * 10000 * scale)"
+					[attr.x2]="xOffset + 9*10000*scale" [attr.y2]="yOffset + (y * 10000 * scale)"
+					stroke="#444" stroke-width="1" />
+  <!-- Title -->
+  <text x="5" y="17" fill="#FFF" font-size="20">Galaxy</text>
+
+	<g *ngIf="showJumplines">
+		<g *ngIf="jumpLines$ | async as jumpLines">
+		    <g *ngFor="let line of jumpLines">
+				  <line stroke="#FF0000" stroke-width=".3"
+						[attr.x1]="xOffset + line.s1.x * scale"
+						[attr.y1]="yOffset + line.s1.y * scale"
+						[attr.x2]="xOffset + line.s2.x * scale"
+						[attr.y2]="yOffset + line.s2.y * scale"/>
+			</g>
+		</g>
+	</g>
+	 
+
+  <g *ngFor="let system of systems$ | async; trackBy: identifyList">
+	  <g *ngIf="isVisibleViafilters(system)">
+	    <!-- Body of each system -->
+	    <circle [attr.cx]="system.x * scale + xOffset"
+			[attr.cy]="system.y * scale + yOffset"
+			[attr.r]="objectScale" 
+			[attr.fill]="getFillColor(system)"
+			[attr.stroke]="getEdgeColor(system)" stroke-width="0"
+			(click)="onSystemClick(system)" (dblclick)="onSystemDoubleClick(system)" style="cursor: pointer;">
+	    	<title>{{ system.type }} {{system.symbol}} - [{{system.x}}, {{system.y}}]</title>
+	  	</circle>
+	  
+	 	  <!-- Text descriptor of each system -->
+		<text *ngIf="showLabels" 
+		    [attr.x]="xOffset + system.x * scale"
+			[attr.y]="yOffset + system.y * scale + 6*objectScale"
+			[attr.font-size]="4 * objectScale" [attr.fill]="getTextColor(system)"
+			(click)="onSystemClick(system)" (dblclick)="onSystemDoubleClick(system)" text-anchor="middle"
+			style="cursor: pointer;">
+	      <title>{{ system.type }} {{system.symbol}} - [{{system.x}}, {{system.y}}]</title>
+	      <tspan
+			[attr.font-weight]="selectedSystem === system ? '800' : '100'"
+			[attr.text-decoration]="selectedSystem === system? 'underline' : ''">
+	          {{system.symbol.substring('X1-'.length)}}
+	      </tspan>
+	    </text>
+	    
+		<text *ngIf="showShipyard && hasShipyard(system)"
+			[attr.x]="xOffset + system.x * scale +2*objectScale"
+			[attr.y]="yOffset + system.y * scale"
+			[attr.font-size]="4 * objectScale" fill="#4444FF"
+			(click)="onSystemClick(system)" (dblclick)="onSystemDoubleClick(system)"
+			style="cursor: pointer;">
+	      <title>shipyard</title>⚓</text>
+		<text *ngIf="showMarket && hasMarketplace(system)"
+			[attr.x]="xOffset + system.x * scale -2*objectScale"
+			[attr.y]="yOffset + system.y * scale"
+			[attr.font-size]="4 * objectScale" fill="#FFD700" text-anchor="end"
+			(click)="onSystemClick(system)" (dblclick)="onSystemDoubleClick(system)" style="cursor: pointer;">
+		      <title>Market</title>$</text>
+		<text *ngIf="showGate && hasJumpGate(system)"
+			[attr.x]="xOffset + system.x * scale"
+			[attr.y]="yOffset + system.y * scale - 1.5*objectScale"
+			[attr.font-size]="4 * objectScale" fill="#FF4444" text-anchor="middle"
+			(click)="onSystemClick(system)" (dblclick)="onSystemDoubleClick(system)" style="cursor: pointer;">
+		      <title>JumpGate</title>¤</text>
+	   </g>
+   </g>
+<!-- a line to the selected system -->  
+  <text *ngIf="selectedSystem" x="8" y="30" fill="#8F8" font-size="14">{{selectedSystem.symbol}}</text>
+  <line stroke="#88FF88" stroke-width=".5" *ngIf="selectedSystem" x1="45" y1="35"
+					[attr.x2]="selectedSystem.x * scale + xOffset"
+					[attr.y2]="selectedSystem.y * scale + yOffset"/>
+<!-- cross hairs around each ship -->
+ <g *ngFor="let ship of allShips">
+	<g *ngIf="getShipSystemLoc(ship)">
+      <text [attr.x] ="xOffset + 10 + scale * getShipSystemLoc(ship)!.x"
+            [attr.y] ="yOffset + scale * getShipSystemLoc(ship)!.y"
+	        font-size="10" fill="#FFBB44"
+	        [attr.transform]="'rotate(-30, ' + (xOffset + scale * getShipSystemLoc(ship)!.x) + ', ' + (yOffset + scale * getShipSystemLoc(ship)!.y) + ')'">
+	        {{ship.symbol.toLowerCase()}}</text>
+	  <line stroke="#FFFFFF" stroke-width="1"
+					[attr.x1] ="xOffset + scale * getShipSystemLoc(ship)!.x +  5" [attr.y1] ="yOffset + scale * getShipSystemLoc(ship)!.y"
+					[attr.x2] ="xOffset + scale * getShipSystemLoc(ship)!.x + 10" [attr.y2] ="yOffset + scale * getShipSystemLoc(ship)!.y"/>
+	  <line stroke="#FFFFFF" stroke-width="1"
+					[attr.x1] ="xOffset + scale * getShipSystemLoc(ship)!.x  -5" [attr.y1] ="yOffset + scale * getShipSystemLoc(ship)!.y"
+					[attr.x2] ="xOffset + scale * getShipSystemLoc(ship)!.x -10" [attr.y2] ="yOffset + scale * getShipSystemLoc(ship)!.y"/>
+	  <line stroke="#FFFFFF" stroke-width="1"
+					[attr.x1] ="xOffset + scale * getShipSystemLoc(ship)!.x" [attr.y1] ="yOffset + scale * getShipSystemLoc(ship)!.y + 5"
+					[attr.x2] ="xOffset + scale * getShipSystemLoc(ship)!.x" [attr.y2] ="yOffset + scale * getShipSystemLoc(ship)!.y + 10"/>
+	  <line stroke="#FFFFFF" stroke-width="1"
+					[attr.x1] ="xOffset + scale * getShipSystemLoc(ship)!.x" [attr.y1] ="yOffset + scale * getShipSystemLoc(ship)!.y - 5"
+					[attr.x2] ="xOffset + scale * getShipSystemLoc(ship)!.x" [attr.y2] ="yOffset + scale * getShipSystemLoc(ship)!.y - 10"/>
+	</g>
+ </g>
+ <g *ngIf="showFactions">
+ 	<g *ngFor="let quadX of [-1, 1]">
+	 	<g *ngFor="let quadY of [-1, 1]">
+		 	<g *ngFor="let faction of getFactions(quadX, quadY); let index = index">
+			  <text [attr.x]="(quadX==-1)? 45 : width - 45"
+			        [attr.y]="((quadY==-1)? 50 : height - 90) + index * 12" 
+			        fill="#CCC" font-size="10"
+			  		[attr.text-anchor]="quadX == -1 ? 'end' : ''">
+			  {{faction.symbol.toLowerCase()}}</text>
+			  <line stroke="#FFFFFF" stroke-width=".3" *ngIf="getFactionSystemLoc(faction)"
+			  		[attr.x1]="(quadX==-1)? 47 : width - 47"
+			  		[attr.y1]="((quadY==-1)? 45 : height - 95) + index * 12"
+					[attr.x2]="xOffset + getFactionSystemLoc(faction)!.x * scale"
+					[attr.y2]="yOffset + getFactionSystemLoc(faction)!.y * scale"/>
+		 	</g>
+	 	</g>
+ 	</g>
+ </g>
+ 
+  <g *ngIf="nearbyCenter && distance">
+  <circle [attr.r]="distance * scale" stroke="#DDD" stroke-width="1" fill="none"
+  		[attr.cx]="xOffset + nearbyCenter.x * scale"
+		[attr.cy]="yOffset + nearbyCenter.y * scale">
+  </circle>
+ </g>
+
+
+</svg><br/>
+<button (click)="onLoadSystems()">Load Systems</button>
+<table>
+<tr>
+<td>Show symbols:<br/>
+<input type="checkbox" [(ngModel)]="showGate"      id="showGate"     ><label for="showGate"     >Jump Gates</label><br/>
+<input type="checkbox" [(ngModel)]="showShipyard"  id="showShipyard" ><label for="showShipyard" >Shipyard</label><br/>
+<input type="checkbox" [(ngModel)]="showMarket"    id="showMarket"   ><label for="showMarket"   >Market</label><br/>
+<input type="checkbox" [(ngModel)]="showAsteroids" id="showAsteroids"><label for="showAsteroids">Asteroids</label><br/>
+<input type="checkbox" [(ngModel)]="showDebris"    id="showDebris"   ><label for="showDebris"   >Debris</label><br/>
+<br/>
+<input type="checkbox" [(ngModel)]="showJumplines" id="showJumplines"><label for="showJumplines">Jumplines</label><br/>
+</td>
+<td>Filter on:<br/>
+<input type="checkbox" [(ngModel)]="filterGate"      id="filterGate"     ><label for="filterGate"     >Jump Gates</label><br/>
+<input type="checkbox" [(ngModel)]="filterShipyard"  id="filterShipyard" ><label for="filterShipyard" >Shipyard</label><br/>
+<input type="checkbox" [(ngModel)]="filterMarket"    id="filterMarket"   ><label for="filterMarket"   >Market</label><br/>
+<input type="checkbox" [(ngModel)]="filterAsteroids" id="filterAsteroids"><label for="filterAsteroids">Asteroids</label><br/>
+<input type="checkbox" [(ngModel)]="filterDebris"    id="filterDebris"   ><label for="filterDebris"   >Debris</label><br/>
+</td>
+</tr>
+</table>

@@ -1,0 +1,31 @@
+
+<button (click)="update()" class="refresh-button">
+	<img src="assets/refresh.png" height="16" />
+</button>
+	Show
+	<select [(ngModel)]="showShips">
+		<option value='All'>All Ships</option>
+		<option value='System'>Ships at System</option>
+	</select>
+	<select [(ngModel)]="showShipsAtSystem" *ngIf="showShips == 'System'" (ngModelChange)="onShowShipsSelectionChange()">
+		<option value="null">Selected System</option>
+		<option *ngFor="let item of systemsWithShipsArray" [ngValue]="item.key">
+		    {{ item.key }} ({{ item.value }} ships)
+		</option>
+	</select>
+	<table>
+		<tr>
+			<td *ngFor="let type of shipTypes">
+				<input type="checkbox" [(ngModel)]="type.value">{{type.frameName.substring(6).toLowerCase()}}
+			</td>
+		</tr>
+	</table>
+<table>
+	<tr *ngFor="let ship of ships">
+		<td [ngClass]="{ 'selected-row': ship === selectedShip }"
+			*ngIf="showShipType(ship) && ((showShips == 'All') || (showShipsAtSystem == null && ship.nav.systemSymbol == selectedSystem?.symbol) || ship.nav.systemSymbol == showShipsAtSystem)"
+			(click)="selectShip(ship)">
+			<app-ship [ship]="ship"></app-ship>
+		</td>
+	</tr>
+</table>

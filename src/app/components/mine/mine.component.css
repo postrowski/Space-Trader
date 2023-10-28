@@ -1,0 +1,33 @@
+
+.selected-ship {
+  background-color: #ffd0d0;
+}
+.selected-cargo {
+  background-color: #d0ffd0;
+}
+.selected-survey {
+  background-color: #d0d0d0;
+}
+
+.cargoItem {
+	background-color: #DDDDFF;
+}
+.emptyCargoSpot{
+	background-color: #DDDDDD;
+}
+.cargoItem, .emptyCargoSpot {
+	padding: 2px;
+	border: 1px solid black;
+	border-radius: 5px;
+	white-space: nowrap;
+	font-size: small;
+	cursor: grab;
+}
+.shipname {
+	font-weight: 800;
+	font-size: large;
+}
+.shipframe {
+	font-weight: 300;
+	font-size: small;
+}

@@ -1,0 +1,193 @@
+<svg id="system-map-svg" [attr.width]="width" [attr.height]="height"
+	(mousedown)="onMouseDown($event)" 
+	(mousemove)="onMouseMove($event)" 
+	(mouseup)="onMouseUp($event)"
+	(mouseleave)="onMouseLeave($event)"
+	(mouseenter)="onMouseEnter($event)"
+>
+  <!-- Add a black background -->
+  <rect x="0" y="0" [attr.width]="width" [attr.height]="height" fill="black" />
+  
+  <g *ngFor="let star of starField">
+	  <circle [attr.cx]="star.x" [attr.cy]="star.y" [attr.r]="star.size/2"
+	          [attr.fill]="star.color">
+	  </circle>
+  </g>
+  <!-- Draw the background grid -->
+  <line stroke="#444" stroke-width="2"  
+					[attr.x1]="xOffset" [attr.y1]="yOffset - 9*50*scale"
+					[attr.x2]="xOffset" [attr.y2]="yOffset + 9*50*scale"/>
+  <line *ngFor="let x of [-8, -7, -6, -5, -4, -3, -2, -1, 1, 2, 3, 4, 5, 6, 7, 8]"
+					[attr.x1]="xOffset + (x * 50 * scale)" [attr.y1]="yOffset - (height+50)*scale"
+					[attr.x2]="xOffset + (x * 50 * scale)" [attr.y2]="yOffset + (height+50)*scale"
+					stroke="#444" stroke-width="1" />
+         
+  <line stroke="#444" stroke-width="2"  
+					[attr.x1]="xOffset - 9*50*scale" [attr.y1]="yOffset"
+					[attr.x2]="xOffset + 9*50*scale" [attr.y2]="yOffset"/>
+  <line *ngFor="let y of [-8, -7, -6, -5, -4, -3, -2, -1, 1, 2, 3, 4, 5, 6, 7, 8]"
+					[attr.x1]="xOffset - 9*50*scale"   [attr.y1]="yOffset + (y * 50 * scale)"
+					[attr.x2]="xOffset + 9*50*scale" [attr.y2]="yOffset + (y * 50 * scale)"
+					stroke="#444" stroke-width="1" />
+
+
+<g *ngIf="system">
+  <!-- Title -->
+  <text x="5" y="17" fill="#FFF" font-size="20">System {{system.symbol}}</text>
+
+  <!-- system's star -->
+  <circle [attr.cx]="xOffset" [attr.cy]="yOffset"
+          [attr.r]="getSystemSize()" [attr.fill]="getSystemFillColor()"
+          [attr.stroke]="getSystemEdgeColor()" stroke-width="1">
+    <title>{{ system.type }} [{{system.x}}, {{system.y}}]</title>
+  </circle>
+  <text [attr.x]="xOffset" [attr.y]="yOffset + getSystemSize()/2" text-anchor="middle"
+        fill="#FFF" font-size="getSystemSize()">{{ system.type.toLowerCase().replace('_', ' ') }}</text>
+  
+  
+  <!-- Body of each waypoint -->
+  <g *ngFor="let waypoint of uiWaypoints">
+  <!-- Draw the orbital line -->
+    <circle *ngIf="!isJumpGate(waypoint.base)"
+            [attr.cx]="xOffset + waypoint.orbitCenter.x * scale"
+			[attr.cy]="yOffset + waypoint.orbitCenter.y * scale"
+			[attr.r]="waypoint.orbitRadius * scale"
+			[attr.stroke]="waypoint.orbitColor" stroke-dasharray="1,1" fill="none"
+			stroke-width=".25" (click)="systemClick(waypoint)" style="cursor: pointer;">
+      <title>{{ waypoint.base.type }} {{waypoint.base.symbol}} - [{{waypoint.base.x}}, {{waypoint.base.y}}]</title>
+    </circle>
+    <circle [attr.cx]="xOffset + waypoint.loc.x * scale"
+			[attr.cy]="yOffset + waypoint.loc.y * scale"
+			[attr.r]="getSize(waypoint.base)" [attr.fill]="waypoint.fillColor"
+			[attr.stroke]="waypoint.edgeColor"
+			stroke-width="1" (click)="systemClick(waypoint)" style="cursor: pointer;">
+      <title>{{ waypoint.base.type }} {{waypoint.base.symbol}} - [{{waypoint.base.x}}, {{waypoint.base.y}}]</title>
+    </circle>
+  </g>
+    <!-- Text descriptor of each waypoint -->
+  <g *ngFor="let waypoint of uiWaypoints">
+    <text [attr.x]="xOffset + waypoint.loc.x * scale + getTextLocationOffset(waypoint.base).x"
+			[attr.y]="yOffset + waypoint.loc.y * scale + getTextLocationOffset(waypoint.base).y"
+			[attr.text-anchor]="getTextAnchor(waypoint.base)"
+			[attr.font-size]="getSize(waypoint.base) + 6" [attr.fill]="waypoint.textColor"
+			(click)="systemClick(waypoint)" style="cursor: pointer;">
+	  <title>{{ waypoint.base.type }} {{waypoint.base.symbol}} - [{{waypoint.base.x}}, {{waypoint.base.y}}]</title>
+      <tspan [attr.font-weight]="selectedWaypoint === waypoint ? '800' : '100'" 
+         [attr.text-decoration]="selectedWaypoint === waypoint ? 'underline' : ''">
+      {{isJumpGate(waypoint.base) ? 'Jump Gate' : 
+      isOrbitalStation(waypoint.base) ? 'Station' :waypoint.base.symbol.substring((system.symbol || '').length + 1)}}
+      </tspan>
+    </text>
+    <text *ngIf="hasUncharted(waypoint.base)"
+          [attr.x]="xOffset + waypoint.loc.x * scale"
+			[attr.y]="yOffset + waypoint.loc.y * scale + getSize(waypoint.base)/2 + 3"
+			text-anchor="middle"
+			[attr.font-size]="getSize(waypoint.base) + 6" [attr.fill]="waypoint.overTextColor"
+			(click)="systemClick(waypoint)" style="cursor: pointer;">
+	  <title>Uncharted</title>
+      ?
+    </text>
+    <!-- decorations for the waypoint -->
+  	<text *ngIf="hasShipyard(waypoint.base)"
+		[attr.x]="xOffset + waypoint.loc.x * scale + 8+getSize(waypoint.base)"
+		[attr.y]="yOffset + waypoint.loc.y * scale"
+		[attr.font-size]="8+getSize(waypoint.base)" fill="#4444FF"
+		(click)="systemClick(waypoint)"
+		style="cursor: pointer;">
+	     <title>shipyard</title>⚓</text>
+	<text *ngIf="hasMarketplace(waypoint.base)"
+		[attr.x]="xOffset + waypoint.loc.x * scale -8-getSize(waypoint.base)"
+		[attr.y]="yOffset + waypoint.loc.y * scale"
+		[attr.font-size]="8+getSize(waypoint.base)" fill="#FFD700" text-anchor="end"
+		(click)="systemClick(waypoint)" style="cursor: pointer;">
+	      <title>Market</title>$</text>
+	<text *ngIf="isJumpGate(waypoint.base)"
+		[attr.x]="xOffset + waypoint.loc.x * scale"
+		[attr.y]="yOffset + waypoint.loc.y * scale +getSize(waypoint.base)"
+		[attr.font-size]="4*getSize(waypoint.base)" fill="#FF4444" text-anchor="middle"
+		(click)="systemClick(waypoint)" style="cursor: pointer;">
+	      <title>JumpGate</title>¤</text>
+  </g>
+
+<!-- Box around the selected waypoint -->
+<g *ngIf="selectedWaypoint?.loc">
+  <line stroke="#FFFFFF" stroke-width="1"
+		[attr.x1]="xOffset + selectedWaypoint!.loc.x * scale -10" [attr.y1]="yOffset + selectedWaypoint!.loc.y * scale -10"
+		[attr.x2]="xOffset + selectedWaypoint!.loc.x * scale - 5" [attr.y2]="yOffset + selectedWaypoint!.loc.y * scale -10"/>
+  <line stroke="#FFFFFF" stroke-width="1"
+		[attr.x1]="xOffset + selectedWaypoint!.loc.x * scale + 5" [attr.y1]="yOffset + selectedWaypoint!.loc.y * scale -10"
+		[attr.x2]="xOffset + selectedWaypoint!.loc.x * scale +10" [attr.y2]="yOffset + selectedWaypoint!.loc.y * scale -10"/>
+  <line stroke="#FFFFFF" stroke-width="1"
+		[attr.x1]="xOffset + selectedWaypoint!.loc.x * scale -10" [attr.y1]="yOffset + selectedWaypoint!.loc.y * scale +10"
+		[attr.x2]="xOffset + selectedWaypoint!.loc.x * scale - 5" [attr.y2]="yOffset + selectedWaypoint!.loc.y * scale +10"/>
+  <line stroke="#FFFFFF" stroke-width="1"
+		[attr.x1]="xOffset + selectedWaypoint!.loc.x * scale + 5" [attr.y1]="yOffset + selectedWaypoint!.loc.y * scale +10"
+		[attr.x2]="xOffset + selectedWaypoint!.loc.x * scale +10" [attr.y2]="yOffset + selectedWaypoint!.loc.y * scale +10"/>
+  <line stroke="#FFFFFF" stroke-width="1"
+		[attr.x1]="xOffset + selectedWaypoint!.loc.x * scale -10" [attr.y1]="yOffset + selectedWaypoint!.loc.y * scale -10"
+		[attr.x2]="xOffset + selectedWaypoint!.loc.x * scale -10" [attr.y2]="yOffset + selectedWaypoint!.loc.y * scale - 5"/>
+  <line stroke="#FFFFFF" stroke-width="1" 
+		[attr.x1]="xOffset + selectedWaypoint!.loc.x * scale -10" [attr.y1]="yOffset + selectedWaypoint!.loc.y * scale + 5"
+		[attr.x2]="xOffset + selectedWaypoint!.loc.x * scale -10" [attr.y2]="yOffset + selectedWaypoint!.loc.y * scale +10"/>
+  <line stroke="#FFFFFF" stroke-width="1" 
+		[attr.x1]="xOffset + selectedWaypoint!.loc.x * scale +10" [attr.y1]="yOffset + selectedWaypoint!.loc.y * scale -10"
+		[attr.x2]="xOffset + selectedWaypoint!.loc.x * scale +10" [attr.y2]="yOffset + selectedWaypoint!.loc.y * scale - 5"/>
+  <line stroke="#FFFFFF" stroke-width="1" 
+		[attr.x1]="xOffset + selectedWaypoint!.loc.x * scale +10" [attr.y1]="yOffset + selectedWaypoint!.loc.y * scale + 5"
+		[attr.x2]="xOffset + selectedWaypoint!.loc.x * scale +10" [attr.y2]="yOffset + selectedWaypoint!.loc.y * scale +10"/>
+</g>
+
+<!-- cross hairs around each ship -->
+	<text [attr.x] ="width" [attr.y] ="15" text-anchor="end"
+	      font-size="14" fill="#FFBB44">Ships in system:</text>
+ <g *ngFor="let shipLoc of shipLocInSystemBySymbol | keyvalue; let index = index">
+	<text [attr.x] ="width -50" [attr.y] ="25 + 11 * index"
+	      font-size="10" fill="#FFBB44"
+	      (click)="onSelectShipBySymbol(shipLoc.key)" style="cursor: pointer;">
+	    <tspan [attr.font-weight]="selectedShip?.symbol == shipLoc.key ? '800' : '100'"
+	           [attr.text-decoration]="selectedShip?.symbol == shipLoc.key ? 'underline' : ''">
+	      {{shipLoc.key.toLowerCase()}}
+	    </tspan>
+   	</text>
+   	<g *ngIf="getShipDest(shipLoc.key)">
+   	  <!-- Draw line from the destination (which is stationary) to the ship,
+   	       So the dashes don't jump around as the ship moves-->
+   	       <!--  class="dashed-line-animation"  -->
+ 			<line stroke="grey" stroke-width="2" stroke-dasharray="5,5"
+ 			[attr.stroke-dashoffset]="animationOffset"
+			[attr.x1] ="xOffset  + scale * getShipDest(shipLoc.key)!.x"
+			[attr.y1] ="yOffset + scale * getShipDest(shipLoc.key)!.y"
+			[attr.x2] ="xOffset  + scale * shipLoc.value.loc.x"
+			[attr.y2] ="yOffset + scale * shipLoc.value.loc.y"/>
+   	</g>
+	<line *ngIf="selectedShip?.symbol == shipLoc.key" stroke="#FFBB44" stroke-width=".5"
+					[attr.x1] ="width-55"
+					[attr.y1] ="21 + 11 * index"
+					[attr.x2] ="xOffset + scale * shipLoc.value.loc.x"
+					[attr.y2] ="yOffset + scale * shipLoc.value.loc.y"/>		
+	<text [attr.x] ="xOffset + 10 + scale * shipLoc.value.loc.x"
+	      [attr.y] ="yOffset + scale * shipLoc.value.loc.y"
+	      [attr.font-size]="shipTextSize()" fill="#FFBB44"
+	      (click)="onSelectShipBySymbol(shipLoc.key)" style="cursor: pointer;"
+	      [attr.transform]="'rotate(-30, ' + (xOffset + scale * shipLoc.value.loc.x) + ', ' + (yOffset + scale * shipLoc.value.loc.y) + ')'">
+	      {{shipLoc.key.toLowerCase()}}</text>
+	<line [attr.stroke]="selectedShip?.symbol == shipLoc.key? '#FFBB44' : '#FFFFFF'" stroke-width="1"
+					[attr.x1] ="xOffset + scale * shipLoc.value.loc.x +  5" [attr.y1] ="yOffset + scale * shipLoc.value.loc.y"
+					[attr.x2] ="xOffset + scale * shipLoc.value.loc.x + 10" [attr.y2] ="yOffset + scale * shipLoc.value.loc.y"/>
+	<line [attr.stroke]="selectedShip?.symbol == shipLoc.key? '#FFBB44' : '#FFFFFF'" stroke-width="1"
+					[attr.x1] ="xOffset + scale * shipLoc.value.loc.x  -5" [attr.y1] ="yOffset + scale * shipLoc.value.loc.y"
+					[attr.x2] ="xOffset + scale * shipLoc.value.loc.x -10" [attr.y2] ="yOffset + scale * shipLoc.value.loc.y"/>
+	<line [attr.stroke]="selectedShip?.symbol == shipLoc.key? '#FFBB44' : '#FFFFFF'" stroke-width="1"
+					[attr.x1] ="xOffset + scale * shipLoc.value.loc.x" [attr.y1] ="yOffset + scale * shipLoc.value.loc.y + 5"
+					[attr.x2] ="xOffset + scale * shipLoc.value.loc.x" [attr.y2] ="yOffset + scale * shipLoc.value.loc.y +10"/>
+	<line [attr.stroke]="selectedShip?.symbol == shipLoc.key? '#FFBB44' : '#FFFFFF'" stroke-width="1"
+					[attr.x1] ="xOffset + scale * shipLoc.value.loc.x" [attr.y1] ="yOffset + scale * shipLoc.value.loc.y - 5"
+					[attr.x2] ="xOffset + scale * shipLoc.value.loc.x" [attr.y2] ="yOffset + scale * shipLoc.value.loc.y -10"/>
+  </g>
+</g>
+</svg><br/>
+<button (click)="onLoadAllWaypoints()" *ngIf="system">Load Waypoints</button>
+<br/>
+
+<app-system-waypoint></app-system-waypoint>
+

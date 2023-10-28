@@ -1,0 +1,61 @@
+input {
+	width: 70px;
+}
+.system-valid {
+	background-color: #AAFFAA;
+}
+button.buttonOn {
+	background-color: #AAFFAA;
+}
+.buttonOff {
+	background-color: #CCCCCC;
+}
+table {
+	border: 0px;
+	border-collapse: collapse;
+}
+
+th {
+	border: 1px solid;
+	margin: 3px;
+}
+
+td {
+    vertical-align: top;
+	border-bottom: 1px solid;
+	margin: 3px;
+}
+
+td.systems-col {
+	min-width: 75px;
+	width: 75px;
+	white-space: nowrap;
+}
+
+td.nav-col {
+	width: 700px;
+}
+
+span.selected-row {
+	border: 2px solid;
+}
+
+.selected-row {
+	background-color: #f0f0f0;
+}
+
+.system-info {
+	font-size: small;
+}
+.marketplace {
+	color: #b59004	
+}
+.jumpgate {
+	color: #FF0000	
+}
+.shipyard {
+	color: #0000FF
+}
+.hidden {
+  display: none;
+}

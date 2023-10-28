@@ -1,0 +1,33 @@
+.vertical-progress-container {
+  display: inline-block;
+  position: relative;
+  width: 20px;
+  height: 30px;
+  border: 1px solid black;
+}
+
+.vertical-progress-bar {
+  position: absolute;
+  bottom: 0;
+  width: 100%;
+  background-color: #3498db;
+  transition: height 1.0s; /* Add a smooth transition effect */
+}
+
+.progress-text {
+  position: absolute;
+  bottom: 0px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 10px;
+  color: #000;
+}
+
+
+table {
+	border: 0px;
+}
+
+td{
+	text-align: center;
+}

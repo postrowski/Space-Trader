@@ -1,0 +1,18 @@
+<h2>Contracts</h2>
+	<button (click)="update()" class="refresh-button"><img src="assets/refresh.png" height="16"/></button>
+<table>
+	<tr>
+		<th style="text-align: center; width: 150px">Contract ID</th>
+		<th style="text-align: center; width: 700px">Details</th>
+	</tr>
+	<tr>
+		<td style="vertical-align: top">
+			<span *ngFor="let contract of contracts" [ngClass]="{ 'selected-row': contract === selectedContract}"
+					(click)="selectContract(contract)">{{contract?.id }}
+			</span>
+		</td>
+		<td [attr.rowspan]="contracts.length" class="selected-row">
+			<app-contract [contract]="selectedContract" *ngIf="selectedContract"></app-contract>
+		</td>
+	</tr>
+</table>

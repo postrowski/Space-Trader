@@ -1,0 +1,24 @@
+h2 {
+	color: red;
+}
+table {
+	color: red;
+	border:3px solid red;
+	border-collapse: collapse;
+}
+th {
+	text-align: right;
+	border:1px solid red;
+	padding:3px;
+	margin:3px;
+}
+
+td{
+	border:1px solid red;
+	padding:3px;
+	margin:3px;
+}
+
+.selected-row {
+  background-color: #f0f0f0;
+}

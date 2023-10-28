@@ -1,0 +1,18 @@
+<button (click)="update()" class="refresh-button">
+	<img src="assets/refresh.png" height="16" />
+</button>
+
+<table>
+	<tr>
+		<td>
+			<table>
+				<tr *ngFor="let faction of factions"
+					(click)="onSelectFaction(faction)"
+					[ngClass]="{ 'selected-faction': faction === selectedFaction}">
+					<td style="padding: 5px;">{{faction.name}}</td>
+				</tr>
+			</table>
+		</td>
+		<td><app-faction *ngIf="selectedFaction" [faction]="selectedFaction"></app-faction></td>
+	</tr>
+</table>

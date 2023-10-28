@@ -1,0 +1,33 @@
+<table *ngIf="waypoint">
+	<tr>
+		<td colspan="2">
+			{{waypoint.type}}&nbsp;
+			<app-waypoint-base [waypoint]="waypoint"></app-waypoint-base>&nbsp;
+			[{{waypoint.x}}, {{waypoint.y}}]
+		</td>
+	</tr>
+	<tr>
+	<td>
+		Orbits: <span class="link" *ngIf="waypoint.orbits" (click)="onClick(waypoint.orbits)">{{waypoint.orbits}} </span><br/>
+		Orbitals:
+		<ul>
+			<li *ngFor="let orbital of waypoint.orbitals">
+				<span class="link" (click)="onClick(orbital.symbol)" (dblclick)="onDoubleClick(orbital.symbol)">{{orbital.symbol}}</span>
+			</li>
+		</ul>
+	</td>
+	<td>Traits:
+			<ul>
+				<li *ngFor="let trait of waypoint.traits"
+					title="{{trait.description}}">{{trait.name}}</li>
+			</ul>
+			<button *ngIf="hasMarketplace()" (click)="modalService.open('modal-marketplace', waypoint)">Marketplace</button>
+			<button *ngIf="hasShipyard()" (click)="modalService.open('modal-shipyard', waypoint)">Shipyard</button>
+			<button *ngIf="isJumpGate()" (click)="modalService.open('modal-jumpgate', waypoint)">Jumpgate</button>
+			<button *ngIf="isMineable()" (click)="modalService.open('modal-mine', waypoint)">Mine</button>
+			<button *ngIf="isFactionHQ()" [attr.enabled]="getShipAtWaypoint() != null" (click)="onNegotiateContract()">Negotiate Contract</button>
+			<button *ngIf="isUncharted()" [attr.enabled]="getShipAtWaypoint() != null" (click)="onCreateChart()">Create Chart</button>
+		</td>
+	</tr>
+</table>
+

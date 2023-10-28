@@ -1,0 +1,20 @@
+table {
+	border-collapse: collapse;
+}
+td {
+	border: 1px solid;
+}
+
+.dashed-line-animation {
+  stroke-dashoffset: -5;
+  animation: dash-move 2s linear infinite;
+}
+
+@keyframes dash-move {
+  0% {
+    stroke-dashoffset: -5;
+  }
+  100% {
+    stroke-dashoffset: 15; /* Adjust this value to control the dash length */
+  }
+}

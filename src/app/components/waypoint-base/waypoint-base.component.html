@@ -1,0 +1,5 @@
+<span class="link" title="{{title}}"
+(click)="onClick(waypointSymbol)">{{waypointSymbol}}</span>&nbsp;
+<button *ngIf="activeShip && isSameSystem()" (click)="onNavigateTo(waypointSymbol)">Nav</button>
+<button *ngIf="activeShip && !isSameSystem()" (click)="onWarpTo(waypointSymbol)">Warp</button>
+<button *ngIf="activeShip && !isSameSystem()" (click)="onJumpTo(waypointSymbol)">Jump</button>

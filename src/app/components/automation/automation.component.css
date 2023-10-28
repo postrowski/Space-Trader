@@ -1,0 +1,36 @@
+div {
+	border: 2px solid black;
+	font-size: xx-large;
+	padding: 10px;
+	margin: 10px;
+}
+div.running {
+	background: green;
+}
+div.stopped {
+	background: red;
+}
+button {
+	background: #BBBBBB
+}
+button.disabled {
+	background: #555555
+}
+td {
+	border: 1px solid black;
+	width: 30px;
+}
+td.wide {
+	width: 300px;
+	border: none;
+}
+table {
+	border: none;
+}
+div.time {
+	text-align: right;
+	font-size: 14px;
+	border: none;
+	padding: 0px;
+	margin: 0px;
+}

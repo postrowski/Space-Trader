@@ -1,0 +1,30 @@
+th-right th{
+	text-align: right;
+}
+th, td {
+	border:1px solid red;
+	padding:3px;
+	margin:3px;
+}
+
+tr.centered-tds td {
+	text-align: center;
+}
+
+.selected-row {
+  background-color: #e0e0e0;
+}
+
+.module {
+	background-color: #DDFFDD;
+}
+.mount {
+	background-color: #DDDDFF;
+}
+.module, .mount{
+	padding: 2px;
+	border: 1px solid black;
+	border-radius: 5px;
+	white-space: nowrap;
+	font-size: x-small;
+}

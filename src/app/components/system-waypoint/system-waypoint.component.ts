@@ -7,6 +7,7 @@ import { AccountService } from 'src/app/services/account.service';
 import { FleetService } from 'src/app/services/fleet.service';
 import { Ship } from 'src/models/Ship';
 import { ContractService } from 'src/app/services/contract.service';
+import { ConstructionMaterial, ConstructionSite } from 'src/models/ConstructionSite';
 
 @Component({
   selector: 'app-system-waypoint',
@@ -15,6 +16,8 @@ import { ContractService } from 'src/app/services/contract.service';
 })
 export class SystemWaypointComponent {
 	waypoint!: WaypointBase;
+	constructionSite: ConstructionSite | null = null;
+	
 	constructor(public galaxyService: GalaxyService,
 	            public accountService: AccountService, 
 	            public fleetService: FleetService,
@@ -23,6 +26,7 @@ export class SystemWaypointComponent {
 		this.galaxyService.activeSystemWaypoint$.subscribe((waypoint) => {
 			if (waypoint) {
 				this.waypoint = waypoint;
+				this.constructionSite = null;
 			}
 		});
 	}
@@ -56,8 +60,7 @@ export class SystemWaypointComponent {
 		return this.waypoint.type == WaypointType[WaypointType.JUMP_GATE];
 	}
 	isMineable() {
-		return this.waypoint.type == WaypointType[WaypointType.ASTEROID_FIELD]
-		    || this.waypoint.type == WaypointType[WaypointType.DEBRIS_FIELD];
+		return WaypointBase.isAsteroid(this.waypoint) || WaypointBase.isDebrisField(this.waypoint);
 	}
 	isFactionHQ(){
 		return this.accountService.isFactionHQ(this.waypoint.symbol);
@@ -76,6 +79,33 @@ export class SystemWaypointComponent {
 		if (ship) {
 			this.contractService.negotiateContract(ship.symbol)
 							 .subscribe((response) => {
+			});
+		}
+	}
+	onSupplyConstructionMaterial(material: ConstructionMaterial) {
+		const ship = this.getShipAtWaypoint();
+		if (ship) {
+			for (const inv of ship.cargo.inventory) {
+				if (inv.symbol == material.tradeSymbol) {
+					const units = Math.min(inv.units, (material.required - material.fulfilled));
+					this.galaxyService.supplyConstructionSite(this.waypoint.symbol, ship.symbol,
+					                                          inv.symbol, units)
+									  .subscribe((response) => {
+						this.constructionSite = response.data.construction;
+						ship.cargo = response.data.cargo;
+					});
+					return;
+				}
+			} 
+		}
+	}
+	
+	onGetConstructionSite() {
+		const ship = this.getShipAtWaypoint();
+		if (ship) {
+			this.galaxyService.getConstructionSite(this.waypoint.symbol)
+							  .subscribe((response) => {
+				this.constructionSite = response.data;
 			});
 		}
 	}

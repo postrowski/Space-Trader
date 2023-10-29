@@ -1,5 +1,5 @@
 export class Chart {
-  waypointSymbol!: string;
+  waypointSymbol?: string;
   submittedBy!: string;
   submittedOn!: string;
 }

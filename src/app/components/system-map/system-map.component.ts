@@ -39,7 +39,7 @@ export class SystemMapComponent extends SvgMap {
 		}
 		this.xOffset = this.width/2;
 		this.yOffset = this.height/2;
-		this.objectScale = 1;
+		this.objectScale = .25;
 		this.uiWaypoints = UiWaypoint.getUiWaypointsFromSystem(this._system);
 	}
 	
@@ -246,12 +246,6 @@ export class SystemMapComponent extends SvgMap {
 		let objectSize = this.getSize(waypoint) * this.objectScale;
 		let fontSize = this.getSize(waypoint) + 6;
 		// Start out at the center below the object
-		let x = 0;
-		let y = objectSize + fontSize / 2 + 5;
-		// font size 15: 50 x 11
-		// font size  9: 40 x 9
-		// font size  8: 35 x 8
-		// font size  7: 30 x 7
 		if (waypoint.type === 'ORBITAL_STATION') {
 			return new LocXY(-3, -2 -objectSize/2);
 		}
@@ -261,7 +255,7 @@ export class SystemMapComponent extends SvgMap {
 		if (waypoint.type === 'MOON' && this._system) {
 			return new LocXY(3 + objectSize/2, -objectSize/2);
 		}
-		return new LocXY(x, y);
+		return new LocXY(0, objectSize + fontSize / 2 + 5);
 	}
 	
 	hasMarketplace(waypoint: WaypointBase | null) {

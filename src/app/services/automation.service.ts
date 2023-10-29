@@ -2,7 +2,6 @@ import { Injectable } from '@angular/core';
 import { BehaviorSubject, Observable } from 'rxjs';
 import { Agent } from 'src/models/Agent';
 import { Contract } from 'src/models/Contract';
-import { Market } from 'src/models/Market';
 import { Ship } from 'src/models/Ship';
 import { ShipType } from 'src/models/ShipType';
 import { Shipyard } from 'src/models/Shipyard';
@@ -102,6 +101,9 @@ export class AutomationService {
 		if (message.includes("ship is not currently ")) { // "...in orbit" or "...docked"
 			this.refreshShips = 'All';
 		}
+		if (message.includes("ship is currently ")) { // "ship is currently in-transit...
+			this.refreshShips = 'All';
+		}
 		const waypointCharted = "waypoint already charted: ";
 		if (message.startsWith(waypointCharted)) {
 			this.refreshWaypoints = message.slice(waypointCharted.length);
@@ -130,7 +132,7 @@ export class AutomationService {
 	}
 	completeStep(step: ExecutionStep) {
 		this.errorCount = Math.max(0, this.errorCount - 1);
-		this.addMessage(step.bot?.ship || null, step.message + ' done.');
+		//this.addMessage(step.bot?.ship || null, step.message + ' done.');
 		if (step.bot?.ship) {
 			this.shipOperationBySymbol.delete(step.bot.ship.symbol);
 		}
@@ -182,6 +184,17 @@ export class AutomationService {
 			} else {
 				this.acceptContract();
 			}
+			const botsByWaypointSymbol = new Map<string, Bot[]>();
+			for (const bot of this.shipBots) {
+				if (bot.ship.nav.status != 'IN_TRANSIT') {
+					const waypointSymbol = bot.ship.nav.waypointSymbol;
+					if (!botsByWaypointSymbol.has(waypointSymbol)) {
+						botsByWaypointSymbol.set(waypointSymbol, []);
+					}
+					botsByWaypointSymbol.get(waypointSymbol)!.push(bot);
+				}
+			}
+			
 			for (const bot of this.shipBots) {
 				if (bot.ship.symbol.toLowerCase() != 'blackrat-1') {
 					//continue;
@@ -199,7 +212,7 @@ export class AutomationService {
 				const waypointSymbol = bot.ship.nav.waypointSymbol;
 				const systemSymbol = GalaxyService.getSystemSymbolFromWaypointSymbol(waypointSymbol);
 				const system = this.systemsBySymbol.get(systemSymbol);
-				if (system == undefined) {
+				if (!system) {
 					this.systemsBySymbol.set(systemSymbol, null);
 					this.dbService.systems.get(systemSymbol).then((sys) => {
 						if (sys) {
@@ -209,7 +222,7 @@ export class AutomationService {
 					this.addMessage(bot.ship, `getting system ${systemSymbol}`);
 					continue; // don't proceed until we get that system back from the DB
 				}
-				const waypoint = system?.waypoints?.find((waypoint) => waypoint.symbol === waypointSymbol) || null;
+				const waypoint = system.waypoints?.find((waypoint) => waypoint.symbol === waypointSymbol) || null;
 				if (!waypoint) {
 					this.addMessage(bot.ship, `Can't find waypoint ${bot.ship.nav.waypointSymbol}`);
 					continue;
@@ -223,16 +236,17 @@ export class AutomationService {
 				const hasUncharted    = WaypointBase.hasUncharted(waypoint);
 				const isDebrisField   = WaypointBase.isDebrisField(waypoint);
 				const hasMarketplace  = WaypointBase.hasMarketplace(waypoint);
-				const isAsteroidField = WaypointBase.isAsteroidField(waypoint);
-				const isFactionHome   = this.agent?.headquarters == waypoint.symbol;
-				let market = hasMarketplace ? this.getUptoDateCachedMarket(waypoint.symbol) : null;
-				let shipyard = hasShipyard ? this.getUptoDateCachedShipyard(waypoint.symbol) : null;
+				const isAsteroid      = WaypointBase.isAsteroid(waypoint);
+				const isGasGiant      = WaypointBase.isGasGiant(waypoint);
+				const isFactionHome   = true;//this.agent?.headquarters == waypoint.symbol;
+				let market = hasMarketplace ? this.marketService.getCachedMarketplace(waypoint.symbol, true) : null;
+				let shipyard = hasShipyard ? this.shipyardService.getCachedShipyard(waypoint.symbol, true) : null;
 				let jumpgate = isJumpgate ? this.jumpgateService.getJumpgateBySymbol(waypoint.symbol) : null;
 
 				if (hasUncharted) {
 					bot.chart(waypoint);
 				}
-				const waypointsToExplore = (system && this.explorationService.getWaypointsNeedingToBeExplored(system)) || [];
+				const waypointsToExplore = this.explorationService.getWaypointsNeedingToBeExplored(system) || [];
 				if (hasMarketplace) {
 					// When we are exploring, always keep as full a fuel tank as possible,
 					// otherwise keep 40% in the tank
@@ -244,9 +258,8 @@ export class AutomationService {
 					if (market == null) {
 						this.getMarket(waypoint, true);
 					} else {
-						let currentPriceByTradeSymbol = this.currentPriceByTradeSymbolByWaypoint[waypoint.symbol];
-						if (!currentPriceByTradeSymbol ||
-							Object.keys(currentPriceByTradeSymbol).length === 0) {
+						let currentPriceByTradeSymbol = this.marketService.currentPriceByTradeSymbolByWaypoint[waypoint.symbol];
+						if (!currentPriceByTradeSymbol || Object.keys(currentPriceByTradeSymbol).length === 0) {
 							this.getMarket(waypoint, true);
 						}
 					}
@@ -294,8 +307,8 @@ export class AutomationService {
 						const sysWaypointHasMarket = WaypointBase.hasMarketplace(sysWaypoint);
 						const sysWaypointHasShipyard = WaypointBase.hasShipyard(sysWaypoint);
 						if (sysWaypointHasMarket || sysWaypointHasShipyard) {
-							let sysMarket = sysWaypointHasMarket ? this.getUptoDateCachedMarket(sysWaypoint.symbol) : null;
-							let sysShipyard = sysWaypointHasShipyard ? this.getUptoDateCachedShipyard(sysWaypoint.symbol) : null;
+							let sysMarket = sysWaypointHasMarket ? this.marketService.getCachedMarketplace(sysWaypoint.symbol, true) : null;
+							let sysShipyard = sysWaypointHasShipyard ? this.shipyardService.getCachedShipyard(sysWaypoint.symbol, true) : null;
 							const missingMarket = sysWaypointHasMarket && (sysMarket == null);
 							const missingShipyard = sysWaypointHasShipyard && (sysShipyard == null);
 							if (missingMarket || missingShipyard) {
@@ -313,7 +326,7 @@ export class AutomationService {
 				if (neededUpgrade) {
 					const hasItem = bot.ship.cargo.inventory.some(inv => inv.symbol === neededUpgrade);
 					if (!hasItem) {
-						const market = this.findCheapestMarketWithItemForSale(bot.ship, neededUpgrade);
+						const market = this.marketService.findCheapestMarketWithItemForSale(system.symbol, neededUpgrade);
 						if (market) {
 							const inv = market.tradeGoods.filter((good)=> good.symbol === neededUpgrade);
 							if (inv && inv.length) {
@@ -324,7 +337,7 @@ export class AutomationService {
 							}
 						}
 					} else {
-						const shipyard = this.findNearestShipyard(bot.ship);
+						const shipyard = this.shipyardService.findNearestShipyard(waypoint);
 						if (shipyard) {
 							this.addMessage(bot.ship, 'going to shipyard to install upgrade');
 							waypointDest = shipyard.symbol;
@@ -332,13 +345,13 @@ export class AutomationService {
 					}
 				}
 				if (isFirstFastestBot && !waypointDest && (this.agent?.credits||0) > 170_000) {
-					const shipyard = this.findNearestShipyard(bot.ship);
+					const shipyard = this.shipyardService.findNearestShipyard(waypoint);
 					if (shipyard) {
 						const houndShips = shipyard.ships.filter(ship => ship.name.toLowerCase().includes('hound'));
 						if (houndShips && (houndShips.length > 0) && 
 							(this.agent?.credits || 0) > houndShips[0].purchasePrice) {
-							let otherShipAtYard = this.getShipsAtWaypoint(bot, shipyard.symbol);
-							if (otherShipAtYard.length == 0) {
+							let botsAtYard = botsByWaypointSymbol.get(shipyard.symbol);
+							if (!botsAtYard) {
 								this.addMessage(bot.ship, 'going to shipyard to buy ship');
 								waypointDest = shipyard.symbol;
 							}
@@ -349,8 +362,8 @@ export class AutomationService {
 								return WaypointBase.hasShipyard(waypoint);
 							});
 							if (shipyardWaypoints?.length) {
-								let otherShipAtYard = this.getShipsAtWaypoint(bot, shipyardWaypoints[0].symbol);
-								if (otherShipAtYard.length == 0) {
+								let botsAtYard = botsByWaypointSymbol.get(shipyardWaypoints[0].symbol);
+								if (!botsAtYard) {
 									this.addMessage(bot.ship, 'going to shipyard to look at ship');
 									waypointDest = shipyardWaypoints[0].symbol;
 								}
@@ -381,7 +394,7 @@ export class AutomationService {
 						}
 					}
 					if (contractItemToBuy && (remainingUnits > 0)) {
-						const market = this.findCheapestMarketWithItemForSale(bot.ship, contractItemToBuy);
+						const market = this.marketService.findCheapestMarketWithItemForSale(system.symbol, contractItemToBuy);
 						if (market && GalaxyService.getSystemSymbolFromWaypointSymbol(market.symbol) == bot.ship.nav.systemSymbol) {
 							const inv = market.tradeGoods.filter((good) => good.symbol === contractItemToBuy);
 							if (inv && inv.length) {
@@ -416,7 +429,12 @@ export class AutomationService {
 					bot.sellAll(this.contract, market, this.shipBots);
 				}
 
-				if (isAsteroidField || isDebrisField) {
+				let roomToMine = bot.ship.cargo.units < bot.ship.cargo.capacity;
+				/*if (roomToMine) {
+					let botsAtWaypoint = botsByWaypointSymbol.get(waypoint.symbol);
+					roomToMine = bot.ship.cargo.units < bot.ship.cargo.capacity/2;
+				}*/
+				if (isAsteroid || isDebrisField) {
 					let surveys = this.surveyService.getSurveysForWaypoint(waypoint);
 					let bestSurvey = this.getBestSurveyToUse(bot.ship.nav.waypointSymbol, surveys);
 					if (surveys.length < 5) {
@@ -427,6 +445,9 @@ export class AutomationService {
 					if (bot.ship.cargo.units < bot.ship.cargo.capacity/2) {
 						bot.mine(bestSurvey);
 					}
+				}
+				if (isGasGiant && roomToMine) {
+					bot.siphon();
 				}
 				if (market) {
 					bot.sellAll(this.contract, market, this.shipBots);
@@ -444,15 +465,22 @@ export class AutomationService {
 					bot.deliverAll(this.contract);
 				}
 				
-				if (!isAsteroidField && !isDebrisField && Ship.containsMount(bot.ship, 'MOUNT_MINING_LASER')) {
-					const asteroidField = system?.waypoints?.find((waypoint) => waypoint.type === 'ASTEROID_FIELD') || null;
-					if (asteroidField) {
-						this.addMessage(bot.ship, 'going to asteroid field to mine.');
-						bot.navigateTo(asteroidField);
+				if (!isAsteroid && !isDebrisField && Ship.containsMount(bot.ship, 'MOUNT_MINING_LASER')) {
+					const asteroid = system.waypoints?.find((way) => WaypointBase.isAsteroid(way) && way != waypoint);
+					if (asteroid) {
+						this.addMessage(bot.ship, 'going to asteroid to mine.');
+						bot.navigateTo(asteroid);
+					}
+				}
+				if (!isGasGiant && Ship.containsMount(bot.ship, 'MOUNT_GAS_SIPHON')) {
+					const gasGiant = system.waypoints?.find((way) => WaypointBase.isGasGiant(way) && way != waypoint);
+					if (gasGiant) {
+						this.addMessage(bot.ship, 'going to gas giant to siphon.');
+						bot.navigateTo(gasGiant);
 					}
 				}
 			}
-			this.galaxyService.getMoreGalaxyDetails();
+			this.galaxyService.getNextPageOfWaypoints();
 		} catch (error) {
 			if (error instanceof ExecutionStep) {
 				if (error.bot?.ship) {
@@ -485,15 +513,6 @@ export class AutomationService {
 	}
 	executionTimes: number[] = [];
 	
-	getShipsAtWaypoint(bot: Bot, waypointSymbol: string): Bot[] {
-		return this.shipBots.filter((otherBot) => {
-			return otherBot !== bot && (
-				otherBot.ship.nav.waypointSymbol === waypointSymbol ||
-				otherBot.ship.nav.route.destination.symbol === waypointSymbol
-			);
-		});
-	}
-						
 	findFirstFastestShipInSystem(systemSymbol: string): Bot | null {
 		systemSymbol = GalaxyService.getSystemSymbolFromWaypointSymbol(systemSymbol);
 		let fastestShip: Bot | null = null;
@@ -507,20 +526,14 @@ export class AutomationService {
 		return fastestShip;
 	}
 			
-	shipyardBySymbol: Map<string, Shipyard> = new Map();
-	shipyardBySymbolTimestamp: Map<string, number> = new Map();
 	getShipyard(waypoint: WaypointBase, shipsAtWaypoint: boolean) {
 		if (!WaypointBase.hasShipyard(waypoint)) {
 			return;
 		}
-		let shipyardTimestamp = this.shipyardBySymbolTimestamp.get(waypoint.symbol);
-		if (!shipyardTimestamp || shipyardTimestamp < Date.now()) {
-			shipyardTimestamp = Date.now() + 60 * 60 * 1000; // 1 hour expiration
-			this.shipyardBySymbolTimestamp.set(waypoint.symbol, shipyardTimestamp);
+		if (this.shipyardService.getCachedShipyard(waypoint.symbol, true) == null) {
 			const step = new ExecutionStep(null, `getting shipyard`);
 			this.shipyardService.getShipyard(waypoint.symbol, shipsAtWaypoint).subscribe((response) => {
 				this.completeStep(step);
-				this.shipyardBySymbol.set(waypoint.symbol, response);
 			}, (error) => {
 				this.onError(error, step);
 			});
@@ -606,91 +619,20 @@ export class AutomationService {
 			}
 		}
 	}
-	marketBySymbol: Map<string, Market> = new Map();
-	marketBySymbolTimestamp: Map<string, number> = new Map();
 	getMarket(waypoint: WaypointBase, shipsAtWaypoint: boolean) {
 		if (!WaypointBase.hasMarketplace(waypoint)) {
 			return;
 		}
-		if (this.getUptoDateCachedMarket(waypoint.symbol) == null) {
-			const marketTimestamp = Date.now() + 60 * 60 * 1000; // 1 hour expiration
-			this.marketBySymbolTimestamp.set(waypoint.symbol, marketTimestamp);
-			const step = new ExecutionStep(null, `getting market`);
+		if (this.marketService.getCachedMarketplace(waypoint.symbol, true) == null) {
+			const step = new ExecutionStep(null, `getting market ${waypoint.symbol}`);
 			this.marketService.getMarketplace(waypoint.symbol, shipsAtWaypoint).subscribe((response) => {
 				this.completeStep(step);
-				this.marketBySymbol.set(waypoint.symbol, response);
-				
-				for (let tradeGood of response.tradeGoods) {
-					let currentPriceByTradeSymbol = this.currentPriceByTradeSymbolByWaypoint[waypoint.symbol];
-					if (!currentPriceByTradeSymbol) {
-						currentPriceByTradeSymbol = {};
-						this.currentPriceByTradeSymbolByWaypoint[waypoint.symbol] = currentPriceByTradeSymbol;
-					}
-					currentPriceByTradeSymbol[tradeGood.symbol] = tradeGood.sellPrice;
-				}
-
 			}, (error) => {
 				this.onError(error, step);
 			});
 			throw step;
 		}
 	}
-	getUptoDateCachedMarket(waypointSymbol: string): Market | null {
-		let market = this.marketBySymbol.get(waypointSymbol);
-		let marketTimestamp = this.marketBySymbolTimestamp.get(waypointSymbol);
-		if (!market || !marketTimestamp || marketTimestamp < Date.now()) {
-			return null;
-		}
-		return market;
-	}
-	getUptoDateCachedShipyard(waypointSymbol: string): Shipyard | null {
-		let shipyard = this.shipyardBySymbol.get(waypointSymbol);
-		let shipyardTimestamp = this.shipyardBySymbolTimestamp.get(waypointSymbol);
-		if (!shipyard || !shipyardTimestamp || shipyardTimestamp < Date.now()) {
-			return null;
-		}
-		return shipyard;
-	}
-
-	findCheapestMarketWithItemForSale(ship: Ship | null, itemSymbol: string): Market | null {
-		let bestMarket = null;
-		let bestPrice = null;
-		for (let marketSymbol of this.marketBySymbol.keys()) {
-			// Only look within the system of the current ship
-			if (ship && !marketSymbol.startsWith(ship.nav.systemSymbol)) {
-				continue;
-			}
-			const market = this.marketBySymbol.get(marketSymbol);
-			for (const tradeGood of market?.tradeGoods || []) {
-				if (tradeGood.symbol == itemSymbol) {
-					if (bestPrice == null || bestPrice > tradeGood.purchasePrice) {
-						bestPrice = tradeGood.purchasePrice;
-						bestMarket = market;
-					}
-				}
-			}
-		}
-		if (!bestMarket) {
-			if (ship) {
-				// If we couldn't find it in the system with this ship, look in other systems.
-				return this.findCheapestMarketWithItemForSale(null, itemSymbol);
-			}
-			return null;
-		}
-		return bestMarket;
-	}
-	findNearestShipyard(ship: Ship): Shipyard | null {
-		let nearestShipyardSymbol: string | null = null;
-		for (let shipyardSymbol of this.shipyardBySymbol.keys()) {
-			// Only look within the system of the current ship
-			if (ship && !shipyardSymbol.startsWith(ship.nav.systemSymbol)) {
-				continue;
-			}
-			return this.shipyardBySymbol.get(shipyardSymbol) || null;
-		}
-		return null;
-	}
-	
 
 	shipTypeMap: Map<ShipType, string> = new Map([
 		[ShipType.SHIP_PROBE,               'FRAME_PROBE'],
@@ -768,7 +710,7 @@ export class AutomationService {
 		}
 		this.getShipyard(waypoint, true);
 		
-		let shipyard = this.shipyardBySymbol.get(waypoint.symbol);
+		let shipyard = this.shipyardService.getCachedShipyard(waypoint.symbol, true);
 		if (!shipyard) {
 			return;
 		}
@@ -805,10 +747,9 @@ export class AutomationService {
 		}
 	}
 	
-	currentPriceByTradeSymbolByWaypoint: { [waypointSymbol: string]: { [tradeSymbol: string]: number } } = {};
 	
 	getBestSurveyToUse(waypointSymbol: string, surveys: Survey[]): Survey | undefined {
-		let currentPriceByTradeSymbol = this.currentPriceByTradeSymbolByWaypoint[waypointSymbol];
+		let currentPriceByTradeSymbol = this.marketService.currentPriceByTradeSymbolByWaypoint[waypointSymbol];
 		if (!currentPriceByTradeSymbol) {
 			return undefined;
 		}

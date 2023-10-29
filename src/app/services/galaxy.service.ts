@@ -9,38 +9,42 @@ import { AccountService } from './account.service';
 import { DBService } from './db.service';
 import { liveQuery } from 'dexie';
 import { Agent } from 'src/models/Agent';
+import { ConstructionSite } from 'src/models/ConstructionSite';
+import { ShipCargo } from 'src/models/ShipCargo';
 
 @Injectable({
   providedIn: 'root'
 })
 export class GalaxyService {
     public apiUrlSystems = 'https://api.spacetraders.io/v2/systems';
+	pageSize = 20;
 
-	dbSystem$ = liveQuery(() => this.db.systems.toArray());
 	async addNewSystemDB(system: System) {
-		await this.db.createSystem(system);
+		await this.dbService.createSystem(system);
 	}
 	
-	private allSystemsSubject = new BehaviorSubject<System[]>([]);
-	allSystems$: Observable<System[]> = this.allSystemsSubject.asObservable();
-
 	private activeSystemSubject = new BehaviorSubject<System | null>(null);
 	activeSystem$: Observable<System | null> = this.activeSystemSubject.asObservable();
 
 	private activeSystemWaypointSubject = new BehaviorSubject<WaypointBase | null>(null);
 	activeSystemWaypoint$: Observable<WaypointBase | null> = this.activeSystemWaypointSubject.asObservable();
 
+	private allSystems: System[] = [];
 	public showGalaxy = false;
 	agent: Agent | null = null;
 	homeSystem: System | null = null;
 	
 	constructor(private http: HttpClient,
 				public accountService: AccountService,
-	            public db: DBService) {
-		this.dbSystem$.subscribe((response) => {
-			this.allSystemsSubject.next(response);
-			this.setHomeSystem();
-		});
+	            public dbService: DBService) {
+	    // Wait for the database to be initialized
+	    this.dbService.initDatabase().then(() => {
+	        liveQuery(() => this.dbService.systems.toArray()).subscribe((response) => {
+	            this.allSystems = response;
+	            this.setHomeSystem();
+	        });
+	    });
+		    
 		this.accountService.agent$.subscribe((agent) => {
 			if (this.agent == null) {
 				this.agent = agent;
@@ -56,8 +60,7 @@ export class GalaxyService {
 	}
 	// Add a new System to the array and emit the updated array
 	addSystem(newSystem: System) {
-		const currentSystems = this.allSystemsSubject.value; // Get the current array
-		for (let system of currentSystems) {
+		for (let system of this.allSystems) {
 			if (system.symbol === newSystem.symbol) {
 				if (newSystem.waypoints && newSystem.waypoints.length) {
 					system.waypoints = newSystem.waypoints;
@@ -66,8 +69,6 @@ export class GalaxyService {
 				return;
 			}
 		}
-		currentSystems.push(newSystem); // Add the new System
-		this.allSystemsSubject.next(currentSystems); // Emit the updated array
 		this.addNewSystemDB(newSystem);
 	}
 	addScannedSystems(systems: System[]) {
@@ -84,7 +85,7 @@ export class GalaxyService {
 	}
 	setActiveSystemWaypoint(systemWaypoint: WaypointBase) {
 		const sysSymbol = GalaxyService.getSystemSymbolFromWaypointSymbol(systemWaypoint.symbol);
-		this.db.systems.get(sysSymbol).then((sys) =>{
+		this.dbService.systems.get(sysSymbol).then((sys) =>{
 			for (let waypoint of sys?.waypoints || []) {
 				if (waypoint.symbol == systemWaypoint.symbol) {
 					this.activeSystemWaypointSubject.next(waypoint);
@@ -98,7 +99,7 @@ export class GalaxyService {
 		return this.activeSystemWaypointSubject.value;
 	}
 	getAllSystems(): System[] {
-		return this.allSystemsSubject.value;
+		return this.allSystems;
 	}
 	getWaypointByWaypointSymbol(waypointSymbol: string) : WaypointBase | null {
 		const system = this.getSystemBySymbol(waypointSymbol);
@@ -154,46 +155,62 @@ export class GalaxyService {
 		}
 	}
 	loadingInProgress = false;
-	getMoreGalaxyDetails(): boolean {
+	waypointPagesLoadedBySystemSymbol = new Map<string, Waypoint[]>();
+	getNextPageOfWaypoints() {
 		if (this.loadingInProgress) {
-			return true;
+			return;
 		}
-		this.loadingInProgress = true;
-		const currentSystems = this.allSystemsSubject.value; // Get the current array
-		for (let system of currentSystems) {
-			if (!system.waypoints) {
-				this.getAllWaypoints(system.symbol).subscribe((response) => {
+		if (this.waypointPagesLoadedBySystemSymbol.size == 0) {
+			for (let system of this.allSystems) {
+				if (!system.waypoints) {
+					this.waypointPagesLoadedBySystemSymbol.set(system.symbol, []);
+					break;
+				}
+			}			
+		}
+		for (const systemSymbol of this.waypointPagesLoadedBySystemSymbol.keys()) {
+			const waypointsSoFar = this.waypointPagesLoadedBySystemSymbol.get(systemSymbol);
+			if (waypointsSoFar) {
+				if (this.loadingInProgress) {
+					return;
+				}
+				this.loadingInProgress = true;
+				const page = waypointsSoFar.length / this.pageSize;
+				this.getWaypointsPage(systemSymbol, page+1).subscribe((response) => {
+					const newWaypointsSoFar = waypointsSoFar.concat(response.data);
+					if (response.meta.total == newWaypointsSoFar.length) {
+						this.onWaypointLoadCompleted(systemSymbol, newWaypointsSoFar);
+						this.waypointPagesLoadedBySystemSymbol.delete(systemSymbol);
+					} else {
+						this.waypointPagesLoadedBySystemSymbol.set(systemSymbol, newWaypointsSoFar);
+					}
 					this.loadingInProgress = false;
-				}, (error) => {
+				},
+				(error) => {
 					this.loadingInProgress = false;
 				});
-				return true;
+				return;
 			}
 		}
-		return false;
 	}
 	
 	loadMoreGalaxies(): boolean {
-		let galaxyCount = this.allSystemsSubject.value.length;
+		let galaxyCount = this.allSystems.length;
 		if (galaxyCount < this.totalSystemsCount || this.totalSystemsCount == 0) {
-			let pageCount = Math.floor(galaxyCount / 20);
-			this.updateGalaxy(20, pageCount + 1); // ask for the next page
+			let pageCount = Math.floor(galaxyCount / this.pageSize);
+			this.updateGalaxyPage(pageCount + 1); // ask for the next page
 			return true;
 		}
 		return false;
 	}
 	totalSystemsCount = 0;
-	updateGalaxy(limit: number, page: number) {
-		this.getSystems(limit, page)
+	updateGalaxyPage(page: number) {
+		this.getSystemsPage(page)
 			.subscribe((response) => {
 				for (let system of response.data) {
 					this.addSystem(system);
 				}
 				this.totalSystemsCount = response.meta.total;
-//				let activeSystem = this.getActiveSystem();
-//				if (activeSystem == null || this.getAllSystems().indexOf(activeSystem) == -1) {
-//					this.selectFirstSystem();
-//				}
 			});
 	}
 
@@ -202,14 +219,14 @@ export class GalaxyService {
 	}
 	selectFirstSystem() {
 		// Set the activeSystem to the first system in the list
-		if (this.allSystemsSubject.value.length > 0) {
-			this.setActiveSystem(this.allSystemsSubject.value[0]);
+		if (this.allSystems.length > 0) {
+			this.setActiveSystem(this.allSystems[0]);
 		}
 	}
 		
-	getSystems(limit: number, page: number) : Observable<{data: System[], meta: Meta}> {
+	getSystemsPage(page: number) : Observable<{data: System[], meta: Meta}> {
 		const headers = this.accountService.getHeader();
-		const params = {limit: limit, page: page};
+		const params = {limit: this.pageSize, page: page};
 		return this.http.get<{data: System[], meta: Meta}>(`${this.apiUrlSystems}`, {headers, params})
 	}
 	getSystem(systemSymbol:string) : Observable<System> {
@@ -219,41 +236,43 @@ export class GalaxyService {
 	}
 	getAllWaypoints(systemSymbol: string): Observable<Waypoint[]> {
 		systemSymbol = GalaxyService.getSystemSymbolFromWaypointSymbol(systemSymbol);
-		const observable = this.getAllWaypoints2(systemSymbol, 20, 1)
+		const observable = this.getAllWaypoints2(systemSymbol, 1)
       		.pipe(shareReplay(1)); // Use the shareReplay operator so our service can subscribe, and so can the caller
 		observable.subscribe((response)=> {
-			this.db.updateSystemWaypoints(systemSymbol, response);
-			const currentSystems = this.allSystemsSubject.value; // Get the current array
-			for (let system of currentSystems) {
-				if (system.symbol === systemSymbol) {
-					system.waypoints = response;
-					break;
-				}
-			}
-			this.allSystemsSubject.next(currentSystems);
-			
-			// If we just updated the selected waypoint, we need to update our copy from the DB
-			const activeWaypointSymbol = this.activeSystemWaypointSubject.value?.symbol;
-			if (activeWaypointSymbol?.startsWith(systemSymbol)) {
-				this.db.systems.get(systemSymbol).then((sys) =>{
-					for (let waypoint of sys?.waypoints || []) {
-						if (waypoint.symbol == activeWaypointSymbol) {
-							this.activeSystemWaypointSubject.next(waypoint);
-							break;
-						}
-					}
-				});
-			}
+			this.onWaypointLoadCompleted(systemSymbol, response);
 		}, (error) => {});
 		return observable;
 	}
-
-	private getAllWaypoints2(systemSymbol: string, limit: number, page: number): Observable<Waypoint[]> {
-		return this.getWaypoints(systemSymbol, limit, page)
+	
+	onWaypointLoadCompleted(systemSymbol: string, waypoints: Waypoint[]) {
+		this.dbService.updateSystemWaypoints(systemSymbol, waypoints);
+		for (let system of this.allSystems) {
+			if (system.symbol === systemSymbol) {
+				system.waypoints = waypoints;
+				break;
+			}
+		}
+		
+		// If we just updated the selected waypoint, we need to update our copy from the DB
+		const activeWaypointSymbol = this.activeSystemWaypointSubject.value?.symbol;
+		if (activeWaypointSymbol?.startsWith(systemSymbol)) {
+			this.dbService.systems.get(systemSymbol).then((sys) =>{
+				for (let waypoint of sys?.waypoints || []) {
+					if (waypoint.symbol == activeWaypointSymbol) {
+						this.activeSystemWaypointSubject.next(waypoint);
+						break;
+					}
+				}
+			});
+		}
+	}
+	
+	private getAllWaypoints2(systemSymbol: string, page: number): Observable<Waypoint[]> {
+		return this.getWaypointsPage(systemSymbol, page)
 				   .pipe(concatMap((response) => {
-						if (response.meta.total > limit * page) {
+						if (response.meta.total > this.pageSize * page) {
 							// If there are more pages, recursively load them
-							return this.getAllWaypoints2(systemSymbol, limit, page + 1)
+							return this.getAllWaypoints2(systemSymbol, page + 1)
 							           .pipe(map((nextPageResults) => [...response.data, ...nextPageResults]));
 						}
 						// No more pages, just return the data from this page
@@ -261,11 +280,11 @@ export class GalaxyService {
 					})
 			);
 	}
-	private getWaypoints(systemSymbol:string, limit: number, page: number) : Observable<{data: Waypoint[], meta: Meta}> {
+	private getWaypointsPage(systemSymbol:string, page: number) : Observable<{data: Waypoint[], meta: Meta}> {
 		systemSymbol = GalaxyService.getSystemSymbolFromWaypointSymbol(systemSymbol);
 		console.log(`galaxyService.getWaypoints(${systemSymbol}) @${this.apiUrlSystems}/${systemSymbol}/waypoints`);
 		const headers = this.accountService.getHeader();
-		const params = {limit: limit, page: page};
+		const params = {limit: this.pageSize, page: page};
 		const observable = this.http.get<{data: Waypoint[], meta: Meta}>
 		                    (`${this.apiUrlSystems}/${systemSymbol}/waypoints`, {headers, params});
 		return observable;
@@ -274,5 +293,20 @@ export class GalaxyService {
 		const headers = this.accountService.getHeader();
 		return this.http.get<Waypoint>
 		                    (`${this.apiUrlSystems}/${systemSymbol}/waypoints/${waypointSymbol}`, {headers})
+	}
+	getConstructionSite(waypointSymbol:string) : Observable<{data: ConstructionSite}> {
+		const systemSymbol = GalaxyService.getSystemSymbolFromWaypointSymbol(waypointSymbol);
+		const headers = this.accountService.getHeader();
+		return this.http.get<{data: ConstructionSite}>
+		                    (`${this.apiUrlSystems}/${systemSymbol}/waypoints/${waypointSymbol}/construction`, {headers})
+	}
+	supplyConstructionSite(waypointSymbol:string, shipSymbol: string, tradeSymbol: string, units: number) : Observable<{data: {construction: ConstructionSite, cargo: ShipCargo}}> {
+		const systemSymbol = GalaxyService.getSystemSymbolFromWaypointSymbol(waypointSymbol);
+		const body = {shipSymbol, tradeSymbol, units};
+		const headers = this.accountService.getHeader();
+		const observable = this.http.post<{data: {construction: ConstructionSite, cargo: ShipCargo}}>
+		                    (`${this.apiUrlSystems}/${systemSymbol}/waypoints/${waypointSymbol}/construction.supply`,
+		                     body, {headers});
+		return observable;
 	}
 }

@@ -1,9 +1,9 @@
 import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { Injectable } from '@angular/core';
-import { BehaviorSubject, Observable, shareReplay } from 'rxjs';
+import { BehaviorSubject, Observable, throwError, shareReplay } from 'rxjs';
 import { Agent } from 'src/models/Agent';
 import { Contract } from 'src/models/Contract';
-import { Faction, FactionSymbol } from 'src/models/Faction';
+import { Faction } from 'src/models/Faction';
 import { Meta } from 'src/models/Meta';
 import { Ship } from 'src/models/Ship';
 import { DBService } from './db.service';
@@ -13,8 +13,8 @@ import { DBService } from './db.service';
 })
 export class AccountService {
 	private apiUrl = 'https://api.spacetraders.io/v2/';
-	token = "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZGVudGlmaWVyIjoiQkxBQ0tSQVQiLCJ2ZXJzaW9uIjoidjIiLCJyZXNldF9kYXRlIjoiMjAyMy0xMC0yMSIsImlhdCI6MTY5NzkwNjcxNiwic3ViIjoiYWdlbnQtdG9rZW4ifQ.XpFjrRBcESAxsiB27SPzEkn3ukhtJomzWyhnddtujuTJyQTrXnRbuoW1P1UwruVj5Y1pu4_4381kOXvJRIFOP2Io2PHKH4z7FdTPlk5pC-LNnHIwUIN3eWbo0YPboiu9B9MRlUMG-8FGftg7AGT5u2G198M9C4e-_kNEdUMSBn3gyits3ARt0Fk5zJHt_3bk3d4ZTylxfYXlS-iAr3s4iGsy5L4UKR-iBjEnT4cunl9QFwmwcMNsmUk1RDcyu8wz_6q-oEhU6QJd8Qd_w8y5lxCo7Ub-l_JNd47eqTS-RdhSTv0hQLvKbG0dkIEDS6c8hstjP-QRGJ2zJ__UrrxAiQ";
-	
+	token = "";
+  //token = "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZGVudGlmaWVyIjoiQkxBQ0tSQVQiLCJ2ZXJzaW9uIjoidjIuMS4wIiwicmVzZXRfZGF0ZSI6IjIwMjMtMTAtMjgiLCJpYXQiOjE2OTg1MTQwMzksInN1YiI6ImFnZW50LXRva2VuIn0.lHZyexTjEbauwFD5vhsOPnxlHcesyjTUuED6DZfT40LCFEVF-AoiwzvM0lhA58uDKZrb9FogGSfeCDGvdpge-M_FLSo-a3PRWWITQRGeS6460j27fR5Pv3rkTBn0DU-pbY6xS7e8b-UTvwzHBOfbAvq-4AanjPX-rOh1JKUlvbkRPfI7HedvL8EQtvZTO7a5bWKkwGs4uopLzZlcRC5Aj1WhSwiKq22mi-Hv_KlXNUeKA0L5LLzyzHUq21vx3gHd-XV2vUhD5H_793y1DLmEGi4kjtEUJYte4K1V-8sgkOGCU6do0K8lzQNXg2LMV87z_X2FP2mMZiKvRsnMHE_kuQ"
 	errorMessages: string[] = [];
 	accountValid = false;
 
@@ -32,6 +32,16 @@ export class AccountService {
 
 	constructor(private http: HttpClient,
 	            public dbService: DBService) {
+		this.dbService.initDatabase().then(() => {
+			this.dbService.agents.toArray().then((response) => {
+				if (response && response.length > 0) {
+					this.token = response[0].agentToken;
+					this.fetchAgent();
+				}
+			});
+		}, (error) => {
+			console.error("Error opening DB: " + error)
+		});
 	}
 
 	// Event handler to update the field with the emitted value
@@ -57,6 +67,10 @@ export class AccountService {
 	//////////////////////
 	// Agent calls
 	fetchAgent():Observable<{data: Agent}> {
+		if (!this.token || this.token == '') {
+		    // Use throwError to create an Observable that emits an error
+		    return throwError('Token is empty');
+		}
 		let headers = this.getHeader();
 		const observable = this.http.get<{data: Agent}>(this.apiUrl + 'my/agent', { headers })
 		      		.pipe(shareReplay(1)); // Use the shareReplay operator so our service can subscribe, and so can the caller
@@ -69,7 +83,7 @@ export class AccountService {
 					while (error.error) {
 						error = error.error;
 					}
-					if (error.message.contains("Token reset_date does not match the server.")) {
+					if (error.message.includes("Token reset_date does not match the server.")) {
 					}
 					this.accountValid = false;
 				}

@@ -16,7 +16,7 @@
 	<table>
 		<tr>
 			<td *ngFor="let type of shipTypes">
-				<input type="checkbox" [(ngModel)]="type.value">{{type.frameName.substring(6).toLowerCase()}}
+				<input type="checkbox" [(ngModel)]="type.value">{{type.frameName.toLowerCase()}}
 			</td>
 		</tr>
 	</table>

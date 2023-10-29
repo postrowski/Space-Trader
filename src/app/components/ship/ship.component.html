@@ -4,7 +4,7 @@
 			<div class="text-container">
 				<div>
 					{{ ship.symbol }}<br /> {{
-					ship.frame.name.substring(6).toUpperCase() }}&nbsp;&nbsp;
+					ship.frame.name.toUpperCase() }}&nbsp;&nbsp;
 					({{ship.registration.role.toLowerCase() }})
 				</div>
 				<div>
@@ -65,13 +65,15 @@ Deposits:    {{ mount?.deposits?.join(", ")'>{{mount.name
 					(click)="onWaypointSymbolClick(ship.nav.route.destination.symbol)">{{ship.nav.route.destination.symbol}}</span>
 				<app-countdown [startTimeStr]="ship.nav.route.departureTime"
 					[endTimeStr]="ship.nav.route.arrival"></app-countdown>
-			</div> Flight Mode:<select [(ngModel)]="ship.nav.flightMode"
-										(ngModelChange)="onShipFlightModeChange(ship)">
-				<option>DRIFT</option>
-				<option>STEALTH</option>
-				<option>CRUISE</option>
-				<option>BURN</option>
-		</select>
+			</div>
+			<div *ngIf="ship.fuel.capacity>0">Flight Mode:
+				<select [(ngModel)]="ship.nav.flightMode" (ngModelChange)="onShipFlightModeChange(ship)">
+					<option>DRIFT</option>
+					<option>STEALTH</option>
+					<option>CRUISE</option>
+					<option>BURN</option>
+				</select>
+			</div>
 		</td>
 		<td *ngIf="ship.nav">
 			<button *ngIf="ship.nav.status === 'DOCKED'" (click)="onOrbitShip(ship)">Orbit Ship</button>
@@ -79,6 +81,7 @@ Deposits:    {{ mount?.deposits?.join(", ")'>{{mount.name
 			<button *ngIf="hasSensor(ship)" (click)="onScanSystem(ship)">Scan System</button>
 			<button *ngIf="ship.fuel.capacity" (click)="onRefuel(ship)">Refuel</button>
 			<button *ngIf="canRefine(ship)" (click)="onRefine(ship)">Refine</button>
+			<button *ngIf="canSiphon(ship)" (click)="onSiphon(ship)">Siphon</button>
 		</td>
 	</tr>
 </table>

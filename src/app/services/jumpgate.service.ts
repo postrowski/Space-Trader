@@ -15,7 +15,6 @@ import { GalaxyService } from './galaxy.service';
 export class JumpgateService {
 	public apiUrlSystems = 'https://api.spacetraders.io/v2/systems';
 
-	dbJumpgates$ = liveQuery(() => this.dbService.jumpgates.toArray());
 	private allJumpgatesSubject = new BehaviorSubject<JumpGate[] | null>(null);
 	allJumpgates$: Observable<JumpGate[] | null> = this.allJumpgatesSubject.asObservable();
 
@@ -23,16 +22,18 @@ export class JumpgateService {
 				public galaxyService: GalaxyService,
 				public dbService: DBService,
 				public accountService: AccountService) {
-		this.dbJumpgates$.subscribe((response) => {
-			this.allJumpgatesSubject.next(response);
-			for (let jumpgate of response) {
-				this.recordJumpgate(jumpgate);
-			}
+	    this.dbService.initDatabase().then(() => {
+			liveQuery(() => this.dbService.jumpgates.toArray()).subscribe((response) => {
+				this.allJumpgatesSubject.next(response);
+				for (let jumpgate of response) {
+					this.recordJumpgate(jumpgate);
+				}
+			});
 		});
 	}
 	jumpgateByWaypointSymbol: Map<string, JumpGate> = new Map();
 	jumpgatesBySystemSymbol: Map<string, JumpGate[]> = new Map();
-	allConnectedSystemSymbols: Set<string> = new Set();
+	allConnectedWaypointSymbols: Set<string> = new Set();
 
 	recordJumpgate(jumpgate: JumpGate) {
 		const systemWaypointSymbol = jumpgate.symbol || '';
@@ -55,8 +56,8 @@ export class JumpgateService {
 			}
 		}
 		jumpgatesInSystem.push(jumpgate);
-		for (let connectedSys of jumpgate.connectedSystems) {
-			this.allConnectedSystemSymbols.add(connectedSys.symbol);
+		for (let waypointSymbol of jumpgate.connections) {
+			this.allConnectedWaypointSymbols.add(waypointSymbol);
 		}
 	}
 
@@ -70,28 +71,20 @@ export class JumpgateService {
 				if (checkedGated.has(gate.symbol!)) {
 					continue;
 				}
-				for (let connection of gate.connectedSystems) {
-					let connectedGates: JumpGate[] | undefined = this.jumpgatesBySystemSymbol.get(connection.symbol);
-					if (!connectedGates) { 
-						const system = this.galaxyService.getSystemBySymbol(connection.symbol);
-						if (system) {
-							for (const way of system.waypoints || []) {
-								if (WaypointBase.isJumpGate(way)) {
-									if (filterCallback(way.symbol!)) {
-										validGateSystemSymbols.add(way.symbol!);
-									}
-								}
+				for (let waypointSymbols of gate.connections) {
+					let connectedGate: JumpGate | undefined = this.jumpgateByWaypointSymbol.get(waypointSymbols);
+					if (!connectedGate) { 
+						const waypoint = this.galaxyService.getWaypointByWaypointSymbol(waypointSymbols);
+						if (waypoint) {
+							if (filterCallback(waypoint.symbol)) {
+								validGateSystemSymbols.add(waypoint.symbol!);
 							}
 						}
-					} else {
-						for (let connectedGate of connectedGates) {
-							if (connectedGate.symbol) {
-								if (filterCallback(connectedGate.symbol)) {
-									validGateSystemSymbols.add(connectedGate.symbol);
-								} else {
-									nextGates.push(connectedGate);
-								}
-							}
+					} else if (connectedGate.symbol) {
+						if (filterCallback(connectedGate.symbol)) {
+							validGateSystemSymbols.add(connectedGate.symbol);
+						} else {
+							nextGates.push(connectedGate);
 						}
 					}
 				}
@@ -130,13 +123,13 @@ export class JumpgateService {
 			// Find the object in the jumpgates
 			const jumpgates = this.jumpgatesBySystemSymbol.get(symbol);
 			for (const jumpgate of jumpgates || []) {
-				for (const connectedSystem of jumpgate?.connectedSystems || []) {
-					if (!visited.has(connectedSystem.symbol)) {
-						visited.add(connectedSystem.symbol);
+				for (const jumpgateSymbol of jumpgate?.connections || []) {
+					if (!visited.has(jumpgateSymbol)) {
+						visited.add(jumpgateSymbol);
 						// Add linked objects to the queue with the updated path
 						queue.push({
-							symbol: connectedSystem.symbol,
-							path: [...path, connectedSystem.symbol]
+							symbol: jumpgateSymbol,
+							path: [...path, jumpgateSymbol]
 						});
 					}
 				}
@@ -173,13 +166,13 @@ export class JumpgateService {
       		.pipe(shareReplay(1)); // Use the shareReplay operator so our service can subscribe, and so can the caller
 		observable.subscribe((jumpgate)=> {
 			this.jumpgateByWaypointSymbol.set(systemWaypointSymbol, jumpgate);
-			for (let connectedSystem of jumpgate.connectedSystems) {
-				const system        = new System(connectedSystem.x, connectedSystem.y);
-				system.symbol       = connectedSystem.symbol;
-				system.sectorSymbol = connectedSystem.sectorSymbol;
-				system.type         = connectedSystem.type;
+			for (let jumpgateSymbol of jumpgate.connections) {
+				const system        = new System(0, 0);
+				system.symbol       = jumpgateSymbol;
+				system.sectorSymbol = '?';
+				system.type         = '?';
 				system.waypoints    = null;
-				system.factions     = [{symbol : connectedSystem.factionSymbol}];
+				system.factions     = [{symbol : '?'}];
 				this.galaxyService.addSystem(system);
 			}
 			this.recordJumpgate(jumpgate);

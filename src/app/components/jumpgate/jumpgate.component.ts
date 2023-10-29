@@ -3,7 +3,6 @@ import { FleetService } from 'src/app/services/fleet.service';
 import { GalaxyService } from 'src/app/services/galaxy.service';
 import { JumpgateService } from 'src/app/services/jumpgate.service';
 import { ModalService } from 'src/app/services/modal.service';
-import { ConnectedSystem } from 'src/models/ConnectedSystem';
 import { JumpGate } from 'src/models/JumpGate';
 import { Ship } from 'src/models/Ship';
 import { WaypointBase, WaypointTrait } from 'src/models/WaypointBase';
@@ -64,11 +63,11 @@ export class JumpgateComponent {
 		})
 	}
 	
-	onJump(system: ConnectedSystem) {
+	onJump(targetWaypoint: string) {
 		if (this.selectedShip) {
-			this.fleetService.jumpShip(this.selectedShip.symbol, system.symbol)
+			this.fleetService.jumpShip(this.selectedShip.symbol, targetWaypoint)
 				.subscribe((response)=> {
-					this.galaxyService.setActiveSystemBySymbol(system.symbol);
+					this.galaxyService.setActiveSystemBySymbol(targetWaypoint);
 				});
 			this.modalService.close();
 		}

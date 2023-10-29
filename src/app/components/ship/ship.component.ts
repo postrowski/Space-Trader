@@ -52,6 +52,9 @@ export class ShipComponent implements OnInit {
 	canRefine(ship: Ship) {
 		return Ship.containsModule(ship, 'MODULE_ORE_REFINERY');
 	}
+	canSiphon(ship: Ship) {
+		return Ship.containsMount(ship, 'MOUNT_GAS_SIPHON_');
+	}
 	onScanSystem(ship: Ship) {
 		if (ship != null) {
 			this.fleetService.scanSystems(ship.symbol).subscribe((response) => {
@@ -77,6 +80,13 @@ export class ShipComponent implements OnInit {
 			}
 		}
 	}
+	onSiphon(ship: Ship) {
+		if (ship) {
+			this.fleetService.siphonGas(ship.symbol)
+					.subscribe((response) => {});
+		}
+	}
+
 	onShipFlightModeChange(ship: Ship) {
 		this.fleetService.setFlightMode(ship.symbol, ship.nav.flightMode).subscribe((response) => {
 		});

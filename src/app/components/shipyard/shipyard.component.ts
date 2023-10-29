@@ -87,7 +87,7 @@ export class ShipyardComponent implements OnInit{
 	}
 	onPurchaseShip(ship: ShipyardShip) {
 		if (this.waypoint) {
-			this.fleetService.purchaseShip(ship.type, this.waypoint.symbol).subscribe((resposne) => {
+			this.fleetService.purchaseShip(ship.type, this.waypoint.symbol).subscribe((response) => {
 				alert("Ship purchased!");
 			});
 		}
@@ -100,14 +100,14 @@ export class ShipyardComponent implements OnInit{
 	}
 	onInstallMount(ship: Ship, cargoItem: ShipCargoItem) {
 		if (cargoItem) {
-			this.fleetService.installMount(ship.symbol, cargoItem.symbol).subscribe((resposne) => {
+			this.fleetService.installMount(ship.symbol, cargoItem.symbol).subscribe((response) => {
 				alert("mount installed!");
 			});
 		}
 	}
 	onRemoveMount(ship: Ship, mount: ShipMount) {
 		if (mount) {
-			this.fleetService.removeMount(ship.symbol, mount.symbol).subscribe((resposne) => {
+			this.fleetService.removeMount(ship.symbol, mount.symbol).subscribe((response) => {
 				alert("mount removed!");
 			});
 		}

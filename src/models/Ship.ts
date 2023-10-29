@@ -73,5 +73,9 @@ export class Ship {
 		return power;
 	}
 
+	public static getCrewAvailable(ship: Ship) {
+		return ship.crew.capacity - ship.crew.required;
+	}
+
 }
 

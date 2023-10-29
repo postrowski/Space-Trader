@@ -25,7 +25,7 @@ export class GalaxyMapComponent extends SvgMap {
 	showFactions = true;
 	autoLoadSystems = false;
 
-	systems$ = liveQuery(() => this.db.systems.toArray());
+	systems: System[] = [];
 	selectedSystem: System | null | undefined = null;
 
 	showGate = false;
@@ -46,7 +46,7 @@ export class GalaxyMapComponent extends SvgMap {
 	@Input() nearbyCenter: System | null | undefined = null;
 	@Input() distance: number | null | undefined = null;
 
-	constructor(public db: DBService,
+	constructor(public dbService: DBService,
 	            public fleetService: FleetService,
 				public galaxyService: GalaxyService,
 				public accountService: AccountService) {
@@ -56,20 +56,25 @@ export class GalaxyMapComponent extends SvgMap {
 		this.galaxyService.activeSystem$.subscribe((system) => {
 			this.selectedSystem = system;
 		});
-		this.systems$.subscribe((respsone) => {
-			// update the sacle anytime the list of systems changes.
-			// recompute the scale for this system:
-			if (respsone.length) {
-				const max = respsone.reduce((maxValue, system) => {
-					const x = Math.abs(system.x);
-					const y = Math.abs(system.y);
-					return Math.max(maxValue, x, y);
-				}, 0);
-				this.scale = this.baseScale = (Math.max(this.width, this.width) / 2) / (max + 10);
-			} else {
-				this.scale = this.baseScale = 1;
-			}
-		})
+	    this.dbService.initDatabase().then(() => {
+	        liveQuery(() => this.dbService.systems.toArray())
+	        .subscribe((response) => {
+				this.systems = response;
+				// update the scale anytime the list of systems changes.
+				// recompute the scale for this system:
+				if (response.length) {
+					const max = response.reduce((maxValue, system) => {
+						const x = Math.abs(system.x);
+						const y = Math.abs(system.y);
+						return Math.max(maxValue, x, y);
+					}, 0);
+					this.scale = this.baseScale = (Math.max(this.width, this.width) / 2) / (max + 10);
+				} else {
+					this.scale = this.baseScale = 1;
+				}
+	        });
+	    });
+		
 		this.fleetService.activeShip$.subscribe((ship) => {
 			this.selectedShip = ship;
 		});
@@ -215,7 +220,7 @@ export class GalaxyMapComponent extends SvgMap {
 		const maxDistSquared = range * range;
 
 		if (this.showJumplines) {
-			this.db.systems
+			this.dbService.systems
 				.filter((sys) => System.hasJumpGate(sys))
 				.sortBy('x') // Sort by the 'x' field
 				.then((jumpgateSystems: System[]) => {

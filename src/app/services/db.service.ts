@@ -28,7 +28,7 @@ export class DBService {
 		this.initDatabase();
 	}
 
-	private initDatabase() {
+	public async initDatabase(): Promise<void> {
 		this.db = new Dexie('Space-TraderDB');
 		this.db.version(1).stores({
 			systems: 'symbol, x, y',
@@ -39,8 +39,14 @@ export class DBService {
 			shipyards: 'symbol',
 			jumpgates: 'symbol',
 			agents: '++id',
-			dbinfo: '++id',
+			dbinfo: 'id',
 		});
+		
+		// Open the database and perform further actions when it's ready
+		await this.db.open()
+		console.log(`Dexie DB Version: ${this.db.verno}`);
+
+		// Initialize the dbinfo table, creating an entry if it doesn't exist
 		this.systems = this.db.table('systems');
 		this.waypoints = this.db.table('waypoints');
 		this.agent = this.db.table('agent');
@@ -50,22 +56,24 @@ export class DBService {
 		this.jumpgates = this.db.table('jumpgates');
 		this.agents = this.db.table('agents');
 		this.dbinfo = this.db.table('dbinfo');
-		
-		this.db.open();
-		this.db.on("ready", () => {
-			console.log(`Dexie DB Version: ${this.db.verno}`);
-			this.dbinfo.get(0).then((result) => {
-				if (result) {
-					this.dbInfo = result;
-					console.log(`Dexie DB Info: ${this.dbInfo}`);
+
+		// Try to get the DbInfo entry
+		this.dbinfo.toArray().then(
+			(result) => {
+				if (result && result.length>0) {
+					this.dbInfo = result[0];
+					console.log(`Dexie DB Info:`, this.dbInfo);
 				} else {
+					// If no entry exists, create one
 					this.setGalaxyPagesLoaded(0);
 				}
 			},
 			(error) => {
 				this.setGalaxyPagesLoaded(0);
-			});
-		});
+			}
+		);
+		// Explicitly resolve the promise when initialization is complete
+  		return Promise.resolve();
 	}
 	
 	clearDataBase() {
@@ -93,29 +101,15 @@ export class DBService {
 	}
 	
 	createSystem(system: System): Promise<string> {
-		// Check if the system with the same symbol exists
-		return this.systems
-			.where('symbol')
-			.equals(system.symbol)
-			.first()
-			.then((existingSystem) => {
-				if (existingSystem) {
-					return Promise.reject('System with the same symbol already exists.');
-				}
-				return this.systems.add(system);
-			});
+		return this.systems.put(system, system.symbol);
 	}
-	createWaypoint(waypoint: Waypoint): Promise<string> {
-		// Check if the waypoint with the same symbol exists
-		return this.waypoints
-			.where('symbol')
-			.equals(waypoint.symbol)
-			.first()
-			.then((existingSystem) => {
-				if (existingSystem) {
-					return Promise.reject('System with the same symbol already exists.');
-				}
-				return this.waypoints.add(waypoint);
+	createWaypoint(waypoint: Waypoint) {
+		this.waypoints.put(waypoint, waypoint.symbol)
+			.then(() => {
+				console.log(`updated waypoint: ${waypoint}`);
+			})
+			.catch((error) => {
+				console.error('Error updating waypoint:', error);
 			});
 	}
 
@@ -137,14 +131,15 @@ export class DBService {
 	// update a single waypoint in an uncharted system
 	async updateWaypoint(waypoint: Waypoint): Promise<void> {
 		try {
-			const existingSystem = await this.systems.get(waypoint.systemSymbol);
+			const systemSymbol = waypoint.systemSymbol;
+			const existingSystem = await this.systems.get(systemSymbol);
 			if (existingSystem?.waypoints) {
 				// Update the properties of the existing system
 				for (const wp of existingSystem.waypoints) {
 					if (wp.symbol == waypoint.symbol) {
 						wp.traits = waypoint.traits;
 						// Update the system in the database
-						await this.systems.update(waypoint.systemSymbol, existingSystem);
+						await this.systems.update(systemSymbol, existingSystem);
 						return;
 					}
 				}
@@ -163,29 +158,21 @@ export class DBService {
 	}
 	
 	addMarket(market: Market) {
-		// Check if the market with the same symbol exists
-		return this.markets
-			.where('symbol')
-			.equals(market.symbol)
-			.first()
-			.then((existingSystem) => {
-				if (existingSystem) {
-					return Promise.reject('Market with the same symbol already exists.');
-				}
-				return this.markets.add(market);
+		this.markets.put(market, market.symbol)
+			.then(() => {
+				console.log(`updated market: ${market}`);
+			})
+			.catch((error) => {
+				console.error('Error updating market:', error);
 			});
 	}
 	addShipyard(shipyard: Shipyard) {
-		// Check if the shipyard with the same symbol exists
-		return this.shipyards
-			.where('symbol')
-			.equals(shipyard.symbol)
-			.first()
-			.then((existingSystem) => {
-				if (existingSystem) {
-					return Promise.reject('Shipyard with the same symbol already exists.');
-				}
-				return this.shipyards.add(shipyard);
+		this.shipyards.put(shipyard, shipyard.symbol)
+			.then(() => {
+				console.log(`updated shipyard: ${shipyard}`);
+			})
+			.catch((error) => {
+				console.error('Error updating shipyard:', error);
 			});
 	}
 	addJumpgate(jumpgate: JumpGate, symbol: string) {
@@ -198,18 +185,20 @@ export class DBService {
 				if (existingSystem) {
 					return Promise.reject('Jumpgate with the same symbol already exists.');
 				}
-				for (let connectedSystem of jumpgate.connectedSystems) {
-					this.jumplinks.add(new JumpLink(symbol, connectedSystem.symbol));
-					this.jumplinks.add(new JumpLink(connectedSystem.symbol, symbol));
+				for (let waypointSymbol of jumpgate.connections) {
+					this.jumplinks.add(new JumpLink(symbol, waypointSymbol));
+					this.jumplinks.add(new JumpLink(waypointSymbol, symbol));
 				}
 				return this.jumpgates.add(jumpgate);
 			});
 	}
 	
 	setGalaxyPagesLoaded(pages: number) {
-		this.dbinfo.put({ ...this.dbInfo, galaxyPagesLoaded: pages }, 0)
+		this.dbinfo.clear();
+		this.dbInfo.galaxyPagesLoaded = pages;
+		this.dbinfo.put(this.dbInfo, 0)
 			.then(() => {
-				this.dbInfo.galaxyPagesLoaded = pages;
+				console.log(`updated DbInfo: ${this.dbInfo}`);
 			})
 			.catch((error) => {
 				console.error('Error updating DbInfo:', error);

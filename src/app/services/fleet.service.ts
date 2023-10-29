@@ -21,12 +21,12 @@ import { concatMap, shareReplay } from 'rxjs/operators';
 import { Survey } from 'src/models/Survey';
 import { Extraction } from 'src/models/Extraction';
 import { ShipCargoItem } from 'src/models/ShipCargoItem';
-import { Contract } from 'src/models/Contract';
 import { SurveyService } from './survey.service';
 import { DBService } from './db.service';
 import { ShipMount } from 'src/models/ShipMount';
 import { GalaxyService } from './galaxy.service';
 import { Meta } from 'src/models/Meta';
+import { JumpTransaction } from 'src/models/JumpTransaction';
 
 @Injectable({
 	providedIn: 'root'
@@ -54,7 +54,14 @@ export class FleetService implements OnInit {
 	            public surveyService: SurveyService, 
 	            public eventQueueService: EventQueueService,
 	            public galaxyService: GalaxyService,
-	            public dbService: DBService) { }
+	            public dbService: DBService) {
+		this.accountService.agent$.subscribe((agent) => {
+			// once we've got an agent, we can load our ships
+			if (agent) {
+				this.updateFleet();
+			}
+		})
+	}
 	            
 	// Add or update the location of a ship
 	setShipLocation(ship: Ship, system: string, loc: LocXY): void {
@@ -130,8 +137,6 @@ export class FleetService implements OnInit {
 	}
 	ngOnInit() {
 		console.log(`start ngOnInit`);
-		this.selectFirstShip();
-		this.updateFleet();
 	}
   	ngOnDestroy() {
 	}
@@ -331,6 +336,22 @@ export class FleetService implements OnInit {
 		surveys.push(survey);
 	}
 	
+	siphonGas(shipSymbol: string): Observable<{data: {cooldown: Cooldown, siphon: Extraction, cargo: ShipCargo}}> {
+		let url = `${this.apiUrlMyShips}/${shipSymbol}/siphon`;
+		let body = {};
+		const headers = this.accountService.getHeader();
+		const observable = this.http.post<{data: {cooldown: Cooldown, siphon: Extraction, cargo: ShipCargo}}>
+		(url, body, { headers })
+      		.pipe(shareReplay(1)); // Use the shareReplay operator so our service can subscribe, and so can the caller
+		observable.subscribe((response)=> {
+			const ship = this.getShipBySymbol(shipSymbol);
+			if (ship) {
+				ship.cooldown = response.data.cooldown;
+				ship.cargo = response.data.cargo;
+			}
+		}, (error) => {});
+		return observable;
+	}
 	extractResources(shipSymbol: string): Observable<{data: {cooldown: Cooldown, extraction: Extraction, cargo: ShipCargo}}> {
 		let url = `${this.apiUrlMyShips}/${shipSymbol}/extract`;
 		let body = {};
@@ -375,11 +396,10 @@ export class FleetService implements OnInit {
 	listShips() {
 	}
 
-	jumpShip(shipSymbol: string, systemSymbol: string): Observable<{ data: {cooldown: Cooldown; nav: ShipNav }}> {
+	jumpShip(shipSymbol: string, waypointSymbol: string): Observable<{ data: {cooldown: Cooldown; nav: ShipNav, transaction: JumpTransaction }}> {
 		const headers = this.accountService.getHeader();
-		systemSymbol = GalaxyService.getSystemSymbolFromWaypointSymbol(systemSymbol);
-		const body = { systemSymbol};
-		const observable = this.http.post<{ data: {cooldown: Cooldown; nav: ShipNav }}>
+		const body = { waypointSymbol};
+		const observable = this.http.post<{ data: {cooldown: Cooldown; nav: ShipNav, transaction: JumpTransaction  }}>
 			(`${this.apiUrlMyShips}/${shipSymbol}/jump`,
 				body, { headers })
       		.pipe(shareReplay(1)); // Use the shareReplay operator so our service can subscribe, and so can the caller

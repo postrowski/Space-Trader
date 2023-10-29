@@ -1,7 +1,6 @@
-export class ShipyardTransaction {
-	waypointSymbol!: string;
-	shipSymbol!: string;
+import { Transaction } from "./Transaction";
+
+export class ShipyardTransaction extends Transaction {
 	price!: number;
 	agentSymbol!: string;
-	timestamp!: string;
 }

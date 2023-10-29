@@ -161,8 +161,8 @@ export class ExplorationService {
 		));
 
 		const route = LocXY.findShortestPath(destination, uniqueLocs);
-		if (route.path.length) {
-			const loc = route.path[1];
+		if (route.length) {
+			const loc = route[1];
 			for (let waypoint of waypoints) {
 				if (loc.x == waypoint.x && loc.y == waypoint.y) {
 					return waypoint;

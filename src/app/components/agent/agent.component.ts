@@ -24,7 +24,6 @@ export class AgentComponent {
 	            public accountService: AccountService,
 	            public dbService: DBService
 	            ) {
-		this.accountService.fetchAgent();
 		this.accountService.agent$.subscribe((agent) => {
 			this.agent = agent;
 		});

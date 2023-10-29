@@ -60,6 +60,10 @@ export class Bot {
 	}
 
 	setFlightMode(mode: string) {
+		if (this.ship.fuel.capacity == 0) {
+			// Probes don't use fuel, they don't make use of flight mode
+			return;
+		}
 		if (this.ship.nav.flightMode != mode) {
 			this.currentStep = new ExecutionStep(this, `enter flight mode ${mode}`);
 			this.fleetService.setFlightMode(this.ship.symbol, mode).subscribe((response)=>{
@@ -101,10 +105,6 @@ export class Bot {
 			const dist = LocXY.getDistance(this.ship.nav.route.destination, waypoint);
 			const mustDrift = dist > this.ship.fuel.current;
 			let mode = mustDrift ? 'DRIFT' : 'CRUISE';
-			if (this.ship.fuel.capacity == 0) {
-				// Probes don't use fuel, they should always run in BURN mode.
-				mode = 'BURN';
-			}
 			this.setFlightMode(mode);
 				
 			this.currentStep = new ExecutionStep(this, `Navigate to ${waypoint.symbol}`);
@@ -117,11 +117,11 @@ export class Bot {
 		}
 	}
 
-	jumpTo(systemSymbol: string){
-		if (this.ship.nav.systemSymbol != systemSymbol) {
+	jumpTo(waypointSymbol: string){
+		if (this.ship.nav.waypointSymbol != waypointSymbol) {
 			this.orbit();
-			this.currentStep = new ExecutionStep(this, `Jump to ${systemSymbol}`);
-			this.fleetService.jumpShip(this.ship.symbol, systemSymbol).subscribe((response)=>{
+			this.currentStep = new ExecutionStep(this, `Jump to ${waypointSymbol}`);
+			this.fleetService.jumpShip(this.ship.symbol, waypointSymbol).subscribe((response)=>{
 				this.completeStep();
 			}, (error) => {
 				this.onError(error);
@@ -194,6 +194,22 @@ export class Bot {
 		});
 		throw this.currentStep;
 	}
+	siphon() {
+		if (this.ship.cooldown.remainingSeconds) {
+			return;
+		}
+		if (!Ship.containsMount(this.ship, 'MOUNT_GAS_SIPHON')) {
+			return;
+		}
+		this.orbit();
+		this.currentStep = new ExecutionStep(this, `Siphoning gas`);
+		this.fleetService.siphonGas(this.ship.symbol).subscribe((response) => {
+			this.completeStep();
+		}, (error) => {
+			this.onError(error);
+		});
+		throw this.currentStep;
+	}
 
 	getNeededUpgrade(): string | null {
 		if (this.ship.frame.mountingPoints <= this.ship.mounts.length) {
@@ -201,11 +217,12 @@ export class Bot {
 		}
 		// If it has any power available, and a free mounting point, it needs an upgrade
 		const powerAvailable = Ship.getPowerAvailable(this.ship);
+		const crewAvailable = Ship.getCrewAvailable(this.ship);
 		if (this.role == Role.Miner || this.role == Role.SurveyorMiner) {
 			if ((this.ship.crew.current) > 0 && (powerAvailable >= 2)) {
 				return 'MOUNT_MINING_LASER_II';
 			}
-			if (powerAvailable >= 1) {
+			if (powerAvailable >= 1 && crewAvailable >= 1) {
 				return 'MOUNT_MINING_LASER_I';
 			}
 		}
@@ -381,6 +398,7 @@ export class Bot {
 				}
 				const waypoint = system?.waypoints?.find((waypoint) => waypoint.symbol === contractDeliverable.destinationSymbol) || null;
 				if (waypoint) {
+					this.addMessage(`delivering goods for contract`);
 					this.navigateTo(waypoint);
 				}
 			}
@@ -404,10 +422,10 @@ export class Bot {
 		this.fleetService.sellCargo(this.ship.symbol, symbol, units).subscribe((response) => {
 			this.completeStep();
 			const transaction = response.data.transaction;
-			let currentPriceByTradeSymbol = this.automationService.currentPriceByTradeSymbolByWaypoint[transaction.waypointSymbol];
+			let currentPriceByTradeSymbol = this.automationService.marketService.currentPriceByTradeSymbolByWaypoint[transaction.waypointSymbol];
 			if (!currentPriceByTradeSymbol) {
 				currentPriceByTradeSymbol = {};
-				this.automationService.currentPriceByTradeSymbolByWaypoint[transaction.waypointSymbol] = currentPriceByTradeSymbol;
+				this.automationService.marketService.currentPriceByTradeSymbolByWaypoint[transaction.waypointSymbol] = currentPriceByTradeSymbol;
 			}
 			currentPriceByTradeSymbol[transaction.tradeSymbol] = transaction.pricePerUnit;
 		}, (error) => {
@@ -579,6 +597,9 @@ export class Bot {
 	}
 
 	traverseWaypoints(waypoints: WaypointBase[]) {
+		if (waypoints.length == 1) {
+			this.navigateTo(waypoints[0]);
+		}
 		const loc = ExplorationService.organizeRoute(waypoints, this.ship.nav.route.destination);
 		if (loc) {
 			this.navigateTo(loc);
@@ -594,7 +615,10 @@ export class Bot {
 			this.automationService.refreshAgent = true;
 		}
 		if (message.includes("ship is not currently ")) { // "...in orbit" or "...docked"
-			this.automationService.refreshShips = 'All';
+			this.automationService.refreshShips = this.ship.symbol;
+		}
+		if (message.includes("ship is currently ")) { // "ship is currently in-transit...
+			this.automationService.refreshShips = this.ship.symbol;
 		}
 		if (message.includes("ship action is still on cooldown")) { // "...in orbit" or "...docked"
 			this.ship.cooldown = error.data.cooldown;

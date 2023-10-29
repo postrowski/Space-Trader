@@ -42,7 +42,7 @@
 	</g>
 	 
 
-  <g *ngFor="let system of systems$ | async; trackBy: identifyList">
+  <g *ngFor="let system of systems; trackBy: identifyList">
 	  <g *ngIf="isVisibleViafilters(system)">
 	    <!-- Body of each system -->
 	    <circle [attr.cx]="system.x * scale + xOffset"

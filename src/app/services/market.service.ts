@@ -13,7 +13,6 @@ import { GalaxyService } from './galaxy.service';
 export class MarketService {
 	public apiUrlSystems = 'https://api.spacetraders.io/v2/systems';
 
-	dbMarkets$ = liveQuery(() => this.dbService.markets.toArray());
 	private allMarketsSubject = new BehaviorSubject<Market[] | null>(null);
 	allMarkets$: Observable<Market[] | null> = this.allMarketsSubject.asObservable();
 
@@ -21,18 +20,21 @@ export class MarketService {
 				public galaxyService: GalaxyService,
 				public dbService: DBService,
 				public accountService: AccountService) {
-		this.dbMarkets$.subscribe((response) => {
-			this.allMarketsSubject.next(response);
-			for (let market of response) {
-				this.recordMarket(market);
-			}
-		});
+	    this.dbService.initDatabase().then(() => {
+			liveQuery(() => this.dbService.markets.toArray()).subscribe((response) => {
+				this.allMarketsSubject.next(response);
+				for (let market of response) {
+					this.recordMarket(market);
+				}
+			});
+	    });
 	}
 	
 	marketByWaypointSymbol: Map<string, Market> = new Map();
 	marketExpirationTimestampByWaypointSymbol: Map<string, number> = new Map();
 	marketsBySystemSymbol: Map<string, Market[]> = new Map();
 	marketExpirationTime = 15 * 60 * 1000; // 15 minutes
+	currentPriceByTradeSymbolByWaypoint: { [waypointSymbol: string]: { [tradeSymbol: string]: number } } = {};
 
 	recordMarket(market: Market) {
 		const systemWaypointSymbol = market.symbol;
@@ -55,6 +57,15 @@ export class MarketService {
 			}
 		}
 		marketsInSystem.push(market);
+		// record all the tradeGoods for this market:
+		for (let tradeGood of market.tradeGoods || []) {
+			let currentPriceByTradeSymbol = this.currentPriceByTradeSymbolByWaypoint[market.symbol];
+			if (!currentPriceByTradeSymbol) {
+				currentPriceByTradeSymbol = {};
+				this.currentPriceByTradeSymbolByWaypoint[market.symbol] = currentPriceByTradeSymbol;
+			}
+			currentPriceByTradeSymbol[tradeGood.symbol] = tradeGood.sellPrice;
+		}
 	}
 	
 	getCachedMarketplace(systemWaypointSymbol:string, considerExpiration: boolean): Market | null{
@@ -95,4 +106,33 @@ export class MarketService {
 		}, (error) => {});
 		return observable;
 	}
+	
+	findCheapestMarketWithItemForSale(systemSymbol: string | null, itemSymbol: string): Market | null {
+		let bestMarket = null;
+		let bestPrice = null;
+		for (let marketSymbol of this.marketsBySystemSymbol.keys()) {
+			// if systemSymbol is present, we only look within that system
+			if (systemSymbol && !marketSymbol.startsWith(systemSymbol)) {
+				continue;
+			}
+			const market = this.marketByWaypointSymbol.get(marketSymbol);
+			for (const tradeGood of market?.tradeGoods || []) {
+				if (tradeGood.symbol == itemSymbol) {
+					if (bestPrice == null || bestPrice > tradeGood.purchasePrice) {
+						bestPrice = tradeGood.purchasePrice;
+						bestMarket = market;
+					}
+				}
+			}
+		}
+		if (bestMarket) {
+			return bestMarket;
+		}
+		if (systemSymbol) {
+			// If we couldn't find it in the specified system, look in other systems.
+			return this.findCheapestMarketWithItemForSale(null, itemSymbol);
+		}
+		return null;
+	}
+
 }

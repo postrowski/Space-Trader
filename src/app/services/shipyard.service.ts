@@ -6,6 +6,7 @@ import { Shipyard } from 'src/models/Shipyard';
 import { AccountService } from './account.service';
 import { DBService } from './db.service';
 import { GalaxyService } from './galaxy.service';
+import { WaypointBase } from 'src/models/WaypointBase';
 
 @Injectable({
   providedIn: 'root'
@@ -13,7 +14,6 @@ import { GalaxyService } from './galaxy.service';
 export class ShipyardService {
 	public apiUrlSystems = 'https://api.spacetraders.io/v2/systems';
 
-	dbShipyards$ = liveQuery(() => this.dbService.shipyards.toArray());
 	private allShipyardsSubject = new BehaviorSubject<Shipyard[] | null>(null);
 	allShipyards$: Observable<Shipyard[] | null> = this.allShipyardsSubject.asObservable();
 
@@ -21,12 +21,14 @@ export class ShipyardService {
 				public galaxyService: GalaxyService,
 				public dbService: DBService,
 				public accountService: AccountService) {
-		this.dbShipyards$.subscribe((response) => {
-			this.allShipyardsSubject.next(response);
-			for (let Shipyard of response) {
-				this.recordShipyard(Shipyard);
-			}
-		})
+		this.dbService.initDatabase().then(() => {
+			liveQuery(() => this.dbService.shipyards.toArray()).subscribe((response) => {
+				this.allShipyardsSubject.next(response);
+				for (let Shipyard of response) {
+					this.recordShipyard(Shipyard);
+				}
+			});
+		});
 	}
 	
 	shipyardByWaypointSymbol: Map<string, Shipyard> = new Map();
@@ -93,4 +95,18 @@ export class ShipyardService {
 		}, (error) => {});
 		return observable;
 	}
+	
+	findNearestShipyard(waypoint: WaypointBase): Shipyard | null {
+		const systemSymbol = waypoint ? GalaxyService.getSystemSymbolFromWaypointSymbol(waypoint.symbol) : null;
+		for (let shipyardSymbol of this.shipyardsBySystemSymbol.keys()) {
+			// Only look within the system of the current ship
+			if (systemSymbol && !shipyardSymbol.startsWith(systemSymbol)) {
+				continue;
+			}
+			// TODO: if multiple shipyards in a single system, find the closest one.
+			return this.shipyardByWaypointSymbol.get(shipyardSymbol) || null;
+		}
+		return null;
+	}
+
 }

@@ -16,6 +16,7 @@ export class ErrorInterceptor implements HttpInterceptor {
 
 				const errorMessage = err.message || 'An error occurred';
 				console.error(errorMessage);
+				alert(errorMessage);
 
 				// You can also log the error to the console or perform other actions as needed
 

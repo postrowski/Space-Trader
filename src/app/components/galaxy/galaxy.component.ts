@@ -1,5 +1,4 @@
 import { Component} from '@angular/core';
-import { liveQuery } from 'dexie';
 import { DBService } from 'src/app/services/db.service';
 import { FleetService } from 'src/app/services/fleet.service';
 import { LocXY } from 'src/models/LocXY';
@@ -12,7 +11,6 @@ import { GalaxyService } from '../../services/galaxy.service';
   styleUrls: ['./galaxy.component.css']
 })
 export class GalaxyComponent {
-	systems$ = liveQuery(() => this.db.systems.toArray());
 	nearbySystems: System[] = [];
 	selectedSystem?: System | null;
 	systemsWithShips: Map<string, number> = new Map();
@@ -24,7 +22,7 @@ export class GalaxyComponent {
 	
 	constructor(public galaxyService: GalaxyService,
 	            public fleetService: FleetService,
-	            public db: DBService) {
+	            public dbService: DBService) {
 		this.galaxyService.activeSystem$.subscribe((system) => {
 			this.selectedSystem = system;
 			if (this.centerSystem == null && system) {
@@ -46,7 +44,7 @@ export class GalaxyComponent {
 	onNearbySystemsChange() {
 		this.message = 'looking for system...';
 		this.searchInProgress = true;
-		this.db.systems
+		this.dbService.systems
 			.where('symbol')
 			.equalsIgnoreCase(this.centerSystemStr)
 			.first()
@@ -114,7 +112,7 @@ export class GalaxyComponent {
 	async findSystemsNearLocation(loc: LocXY, distance: number): Promise<System[]> {
 		  // Use the where clause to filter systems that meet the distance condition
 		const dist2 = distance * distance;
-		return await this.db.systems
+		return await this.dbService.systems
 		    .where('x').between(loc.x - distance, loc.x + distance)
 //		    .and((system: System) => system.y >= y - distance && system.y <= y + distance)
 			.filter((system: System) => {
@@ -142,10 +140,10 @@ export class GalaxyComponent {
 		this.galaxyService.setActiveSystem(system);
 	}
 
-	onJump(system: System) {
+	onJump(waypointSymbol: string) {
 		const ship = this.fleetService.getActiveShip();
 		if (ship) {
-			this.fleetService.jumpShip(ship?.symbol, system.symbol)
+			this.fleetService.jumpShip(ship?.symbol, waypointSymbol)
 			.subscribe((response) => {
 			});
 		}

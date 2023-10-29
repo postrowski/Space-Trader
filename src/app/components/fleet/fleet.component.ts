@@ -79,6 +79,5 @@ export class FleetComponent {
 	}
 
 	ngOnInit() {
-		this.update();
 	}
 }

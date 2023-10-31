@@ -25,28 +25,17 @@ export class LocXY {
 	            : LocXY[] {
 		const startTime = Date.now();
 		const loop: LocXY[] = LocXY.findShortestPathLoop([...remainingLocs]);
-		let minDist = Infinity;
-		let path: LocXY[] = [];
-		for (let index = 0; index < loop.length; index++) {
-			const dist = LocXY.getDistanceSquared(loop[index], currentLoc);
-			if (dist < minDist) {
-				minDist = dist;
-				const firstPart: LocXY[] = loop.slice(0, index); // Elements before index n
-				const secondPart: LocXY[] = loop.slice(index); // Elements after index n
-				path = [...secondPart, ...firstPart];
-			}
-		}
-		let diag = `places to visit, starting from (${currentLoc.x}, ${currentLoc.y})\n `;
+		let diag = `places to visit, starting from (${currentLoc.x}, ${currentLoc.y})\n`;
 		for (let loc of remainingLocs) {
 			diag += `(${loc.x}, ${loc.y}),`;
 		}
-		diag += ` \n results: `;
-		for (let loc of remainingLocs) {
+		diag += `\nresults: `;
+		for (let loc of loop) {
 			diag += `(${loc.x}, ${loc.y})->`;
 		}
-		diag += ` \n took ${Date.now()-startTime} milliseconds to plot`;
+		diag += `\ntook ${Date.now()-startTime} milliseconds to plot`;
 		console.log(diag);
-		return path;
+		return loop;
 	}
 	
 	public static findShortestPathLoop(locations: LocXY[]): LocXY[] {

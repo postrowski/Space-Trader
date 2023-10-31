@@ -16,17 +16,19 @@ import { ExplorationService } from './exploration.service';
 import { FleetService } from './fleet.service';
 import { GalaxyService } from './galaxy.service';
 import { JumpgateService } from './jumpgate.service';
-import { MarketService } from './market.service';
+import { UiMarketItem, MarketService } from './market.service';
 import { ShipyardService } from './shipyard.service';
 import { SurveyService } from './survey.service';
+import { ShipCargoItem } from 'src/models/ShipCargoItem';
+import { LocXY } from 'src/models/LocXY';
+import { LogMessage } from '../utils/log-message';
 
 @Injectable({
 	providedIn: 'root'
 })
 export class AutomationService {
 
-	public messagesByShipSymbol = new Map<string, string[]>();
-	
+	public messageSubject = new BehaviorSubject<LogMessage>(new LogMessage());
 	private runningSubject = new BehaviorSubject<boolean>(false);
 	running$: Observable<boolean> = this.runningSubject.asObservable();
 
@@ -77,16 +79,13 @@ export class AutomationService {
 	}
 	
 	addMessage(ship: Ship | null, message: string) {
-		let messages = this.messagesByShipSymbol.get(ship?.symbol || '');
-		if (!messages) {
-			messages = [];
-			this.messagesByShipSymbol.set(ship?.symbol || '', messages);
-		}
+		const logMessage = new LogMessage();
+		logMessage.message = message;
+		logMessage.shipSymbol = ship?.symbol || '';
+		logMessage.timestamp  = new Date();
+		this.messageSubject.next(logMessage);
+		
 		message = `${ship?.symbol}: ${new Date().toLocaleTimeString()} - ${message}`;
-		messages.push(message);
-		if (messages.length > 15) {
-			messages.shift();
-		}
 		console.log(message);
 	}
 	
@@ -239,30 +238,16 @@ export class AutomationService {
 				const isAsteroid      = WaypointBase.isAsteroid(waypoint);
 				const isGasGiant      = WaypointBase.isGasGiant(waypoint);
 				const isFactionHome   = true;//this.agent?.headquarters == waypoint.symbol;
-				let market = hasMarketplace ? this.marketService.getCachedMarketplace(waypoint.symbol, true) : null;
-				let shipyard = hasShipyard ? this.shipyardService.getCachedShipyard(waypoint.symbol, true) : null;
+				let hasPriceData = hasMarketplace ? this.marketService.hasPriceData(waypoint.symbol) : false;
+				let shipyard = hasShipyard ? this.shipyardService.getCachedShipyard(waypoint.symbol, false) : null;
 				let jumpgate = isJumpgate ? this.jumpgateService.getJumpgateBySymbol(waypoint.symbol) : null;
 
 				if (hasUncharted) {
 					bot.chart(waypoint);
 				}
-				const waypointsToExplore = this.explorationService.getWaypointsNeedingToBeExplored(system) || [];
-				if (hasMarketplace) {
-					// When we are exploring, always keep as full a fuel tank as possible,
-					// otherwise keep 40% in the tank
-					let minPercent = waypointsToExplore.length > 0 ? 95 : 40;
-					bot.refuel(minPercent);
-
-					// If this waypoint has a marketplace, but our cache is too old,
-					// update the cached marketplace:
-					if (market == null) {
-						this.getMarket(waypoint, true);
-					} else {
-						let currentPriceByTradeSymbol = this.marketService.currentPriceByTradeSymbolByWaypoint[waypoint.symbol];
-						if (!currentPriceByTradeSymbol || Object.keys(currentPriceByTradeSymbol).length === 0) {
-							this.getMarket(waypoint, true);
-						}
-					}
+				if (hasMarketplace && !hasPriceData) {
+					// If this waypoint has a marketplace, but we dont have real price data:
+					this.getMarket(waypoint, true);
 				}
 				if (hasShipyard && (shipyard == null)) {
 					// If this waypoint has a shipyard, but our cache is too old,
@@ -273,11 +258,21 @@ export class AutomationService {
 					// If this waypoint is a jumpgate, but not in our records:
 					this.jumpgateService.getJumpgate(waypoint.symbol, true);
 				}
+
+				const waypointsToExplore = this.explorationService.getWaypointsNeedingToBeExplored(system) || [];
+				if (hasMarketplace) {
+					// When we are exploring, always keep as full a fuel tank as possible,
+					// otherwise keep 40% in the tank
+					let minPercent = waypointsToExplore.length > 0 ? 95 : 40;
+					bot.refuel(minPercent);
+				}
 				
 				const firstFastestBot = this.findFirstFastestShipInSystem(waypoint.symbol);
 				const isFirstFastestBot = firstFastestBot == bot;
-				if (waypointsToExplore && isFirstFastestBot) {
-					this.exploreSystem(bot, system);
+				if (waypointsToExplore && isFirstFastestBot && waypointsToExplore.length > 0) {
+					// Navigate to the next waypoint that needs to be explored:
+					this.addMessage(bot.ship, "exploring");
+					bot.traverseWaypoints(waypointsToExplore, waypoint);
 				}
 				// Lets negatiate contracts first:
 				if (isFirstFastestBot && !this.contract) {
@@ -307,9 +302,9 @@ export class AutomationService {
 						const sysWaypointHasMarket = WaypointBase.hasMarketplace(sysWaypoint);
 						const sysWaypointHasShipyard = WaypointBase.hasShipyard(sysWaypoint);
 						if (sysWaypointHasMarket || sysWaypointHasShipyard) {
-							let sysMarket = sysWaypointHasMarket ? this.marketService.getCachedMarketplace(sysWaypoint.symbol, true) : null;
-							let sysShipyard = sysWaypointHasShipyard ? this.shipyardService.getCachedShipyard(sysWaypoint.symbol, true) : null;
-							const missingMarket = sysWaypointHasMarket && (sysMarket == null);
+							let sysMarket = sysWaypointHasMarket ? this.marketService.hasPriceData(sysWaypoint.symbol) : false;
+							let sysShipyard = sysWaypointHasShipyard ? this.shipyardService.getCachedShipyard(sysWaypoint.symbol, false) : null;
+							const missingMarket = sysWaypointHasMarket && !sysMarket;
 							const missingShipyard = sysWaypointHasShipyard && (sysShipyard == null);
 							if (missingMarket || missingShipyard) {
 								marketsToVisit.push(sysWaypoint);
@@ -317,7 +312,7 @@ export class AutomationService {
 						}
 					}
 					if (marketsToVisit.length > 0) {
-						bot.traverseWaypoints(marketsToVisit);
+						bot.traverseWaypoints(marketsToVisit, waypoint);
 					}
 				}
 
@@ -326,14 +321,11 @@ export class AutomationService {
 				if (neededUpgrade) {
 					const hasItem = bot.ship.cargo.inventory.some(inv => inv.symbol === neededUpgrade);
 					if (!hasItem) {
-						const market = this.marketService.findCheapestMarketWithItemForSale(system.symbol, neededUpgrade);
-						if (market) {
-							const inv = market.tradeGoods.filter((good)=> good.symbol === neededUpgrade);
-							if (inv && inv.length) {
-								if ((this.agent?.credits || 0) > inv[0].purchasePrice) {
-									this.addMessage(bot.ship, 'going to market to buy upgrade');
-									waypointDest = market.symbol;
-								}
+						const marketItem: UiMarketItem | null = this.marketService.findCheapestMarketItemForSaleInSystem(system.symbol, neededUpgrade);
+						if (marketItem) {
+							if ((this.agent?.credits || 0) > marketItem.purchasePrice) {
+								this.addMessage(bot.ship, 'going to market to buy upgrade');
+								waypointDest = marketItem.marketSymbol;
 							}
 						}
 					} else {
@@ -387,22 +379,17 @@ export class AutomationService {
 							if (remainingUnits > 0) {
 								contractItemToBuy = goods.tradeSymbol;
 								break;
-							} else {
-								this.addMessage(bot.ship, `going to deliver contract goods ${goods.tradeSymbol}`);
-								waypointDest = goods.destinationSymbol;
 							}
+							this.addMessage(bot.ship, `going to deliver contract goods ${goods.tradeSymbol}`);
+							waypointDest = goods.destinationSymbol;
+							break;
 						}
 					}
 					if (contractItemToBuy && (remainingUnits > 0)) {
-						const market = this.marketService.findCheapestMarketWithItemForSale(system.symbol, contractItemToBuy);
-						if (market && GalaxyService.getSystemSymbolFromWaypointSymbol(market.symbol) == bot.ship.nav.systemSymbol) {
-							const inv = market.tradeGoods.filter((good) => good.symbol === contractItemToBuy);
-							if (inv && inv.length) {
-								if ((this.agent?.credits || 0) > inv[0].purchasePrice) {
-									this.addMessage(bot.ship, `going to market to buy contract item ${contractItemToBuy}`);
-									waypointDest = market.symbol;
-								}
-							}
+						const marketItem: UiMarketItem | null = this.marketService.findCheapestMarketItemForSaleInSystem(system.symbol, contractItemToBuy);
+						if (marketItem && ((this.agent?.credits || 0) > marketItem.purchasePrice)) {
+							this.addMessage(bot.ship, `going to market to buy contract item ${contractItemToBuy}`);
+							waypointDest = marketItem.marketSymbol;
 						}
 					}
 				}
@@ -418,15 +405,15 @@ export class AutomationService {
 				}
 
 				if (bot.role == Role.Refinery){
-					bot.gatherOre(market, this.shipBots);
+					bot.gatherOre(this.shipBots);
 					bot.refineAll();
 				} else if (bot.role == Role.Explorer){
 					bot.exploreSystems();
 				}
 
-				if (bot.ship.nav.status === 'DOCKED' && market) {
+				if (bot.ship.nav.status === 'DOCKED' && hasMarketplace) {
 					// If we are already docked at a marketplace, sell everything we've got:
-					bot.sellAll(this.contract, market, this.shipBots);
+					bot.sellAll(this.contract, this.shipBots);
 				}
 
 				let roomToMine = bot.ship.cargo.units < bot.ship.cargo.capacity;
@@ -436,22 +423,22 @@ export class AutomationService {
 				}*/
 				if (isAsteroid || isDebrisField) {
 					let surveys = this.surveyService.getSurveysForWaypoint(waypoint);
-					let bestSurvey = this.getBestSurveyToUse(bot.ship.nav.waypointSymbol, surveys);
+					let bestSurvey = this.getBestSurveyToUse(waypoint, surveys);
 					if (surveys.length < 5) {
 						bot.survey();
 					}
 					// If our cargo hold is below half capacity, we should be able
 					// to get another load:
-					if (bot.ship.cargo.units < bot.ship.cargo.capacity/2) {
+					if (roomToMine) {
 						bot.mine(bestSurvey);
 					}
 				}
 				if (isGasGiant && roomToMine) {
 					bot.siphon();
 				}
-				if (market) {
-					bot.sellAll(this.contract, market, this.shipBots);
-					bot.buyModuleForUpgrade(market!, this.agent?.credits || 0);
+				if (hasMarketplace) {
+					bot.sellAll(this.contract, this.shipBots);
+					bot.buyModuleForUpgrade(this.agent?.credits || 0);
 				}
 				if (hasShipyard) {
 					bot.upgradeShip(waypoint);
@@ -459,24 +446,47 @@ export class AutomationService {
 				}
 				
 				if (this.contract) {
-					if (isFirstFastestBot && market) {
-						bot.buyContractGoods(market!, this.agent?.credits || 0, this.contract);
+					if (isFirstFastestBot && hasMarketplace) {
+						bot.buyContractGoods(this.agent?.credits || 0, this.contract);
 					}
 					bot.deliverAll(this.contract);
 				}
 				
-				if (!isAsteroid && !isDebrisField && Ship.containsMount(bot.ship, 'MOUNT_MINING_LASER')) {
-					const asteroid = system.waypoints?.find((way) => WaypointBase.isAsteroid(way) && way != waypoint);
-					if (asteroid) {
-						this.addMessage(bot.ship, 'going to asteroid to mine.');
-						bot.navigateTo(asteroid);
+				if (roomToMine) {
+					if (Ship.containsMount(bot.ship, 'MOUNT_GAS_SIPHON')) {
+						if (!isGasGiant) {
+							const gasGiants = system.waypoints?.filter((way) => WaypointBase.isGasGiant(way) && way != waypoint) || [];
+							if (gasGiants.length > 0) {
+								const nearbyWaypoints = ExplorationService.sortWaypointsByDistanceFrom(gasGiants, waypoint);
+								this.addMessage(bot.ship, 'going to gas giant to siphon.');
+								bot.navigateTo(nearbyWaypoints[0]);
+							}
+						}
+					} else if (!isAsteroid && !isDebrisField && Ship.containsMount(bot.ship, 'MOUNT_MINING_LASER')) {
+						const asteroids = system.waypoints?.filter((way) => WaypointBase.isAsteroid(way) && way != waypoint) || [];
+						if (asteroids.length > 0) {
+							const nearbyWaypoints = ExplorationService.sortWaypointsByDistanceFrom(asteroids, waypoint);
+							this.addMessage(bot.ship, 'going to asteroid to mine.');
+							bot.navigateTo(nearbyWaypoints[0]);
+						}
 					}
-				}
-				if (!isGasGiant && Ship.containsMount(bot.ship, 'MOUNT_GAS_SIPHON')) {
-					const gasGiant = system.waypoints?.find((way) => WaypointBase.isGasGiant(way) && way != waypoint);
-					if (gasGiant) {
-						this.addMessage(bot.ship, 'going to gas giant to siphon.');
-						bot.navigateTo(gasGiant);
+				} else if (bot.ship.cargo.units > 0) {
+					let majorityItem: ShipCargoItem | null = null;
+					let inventory = [...bot.ship.cargo.inventory];
+					inventory = inventory.filter((inv) => !inv.symbol.startsWith("MODULE") &&
+														  !inv.symbol.startsWith("MOUNT") &&
+														  !inv.symbol.includes("ANTIMATTER"));
+					inventory.sort((i1, i2) => {
+						if (i1.units < i2.units) return -1;
+						if (i1.units > i2.units) return 1;
+						return 0;
+					});
+					for (const inv of inventory) {
+						const destWaypoint = this.marketService.getNearestMarketInSystemThatTradesItem(waypoint, inv.symbol, false);
+						if (destWaypoint) {
+							this.addMessage(bot.ship, `Navigating to ${destWaypoint.symbol} to sell ${inv?.symbol}`);
+							bot.navigateTo(destWaypoint);
+						}
 					}
 				}
 			}
@@ -530,7 +540,7 @@ export class AutomationService {
 		if (!WaypointBase.hasShipyard(waypoint)) {
 			return;
 		}
-		if (this.shipyardService.getCachedShipyard(waypoint.symbol, true) == null) {
+		if (this.shipyardService.getCachedShipyard(waypoint.symbol, false) == null) {
 			const step = new ExecutionStep(null, `getting shipyard`);
 			this.shipyardService.getShipyard(waypoint.symbol, shipsAtWaypoint).subscribe((response) => {
 				this.completeStep(step);
@@ -623,7 +633,7 @@ export class AutomationService {
 		if (!WaypointBase.hasMarketplace(waypoint)) {
 			return;
 		}
-		if (this.marketService.getCachedMarketplace(waypoint.symbol, true) == null) {
+		if (!this.marketService.hasPriceData(waypoint.symbol)) {
 			const step = new ExecutionStep(null, `getting market ${waypoint.symbol}`);
 			this.marketService.getMarketplace(waypoint.symbol, shipsAtWaypoint).subscribe((response) => {
 				this.completeStep(step);
@@ -710,7 +720,7 @@ export class AutomationService {
 		}
 		this.getShipyard(waypoint, true);
 		
-		let shipyard = this.shipyardService.getCachedShipyard(waypoint.symbol, true);
+		let shipyard = this.shipyardService.getCachedShipyard(waypoint.symbol, false);
 		if (!shipyard) {
 			return;
 		}
@@ -738,41 +748,32 @@ export class AutomationService {
 			}
 		}
 	}
-	exploreSystem(bot: Bot, system: System) {
-		// Navigate to the next waypoint that needs to be explored:
-		const unchartedWaypoints = system.waypoints?.filter((waypoint) => this.explorationService.waypointNeedsToBeExplored(waypoint));
-		if (unchartedWaypoints && unchartedWaypoints.length > 0) {
-			this.addMessage(bot.ship, "exploring");
-			bot.traverseWaypoints(unchartedWaypoints);
-		}
-	}
-	
-	
-	getBestSurveyToUse(waypointSymbol: string, surveys: Survey[]): Survey | undefined {
-		let currentPriceByTradeSymbol = this.marketService.currentPriceByTradeSymbolByWaypoint[waypointSymbol];
-		if (!currentPriceByTradeSymbol) {
-			return undefined;
-		}
 
+	getBestSurveyToUse(waypoint: WaypointBase, surveys: Survey[]): Survey | undefined {
 		const surveyAverages: { [symbol: string]: number } = {};
+
 		// Calculate average price per unit for each survey
 		surveys.forEach((survey) => {
 			const sum = survey.deposits.reduce((total, deposit) => {
-				let value = currentPriceByTradeSymbol[deposit.symbol];
-				if (this.contract) {
-					// favor surveys that lead to resources we need for a contract
-					for (let goods of this.contract.terms.deliver) {
-						if (goods.tradeSymbol == deposit.symbol) {
-							const remainingUnits = goods.unitsRequired - goods.unitsFulfilled;
-							if (remainingUnits > 0) {
-								return total + value * 2;
-							}
-						}
-					}
+				const nearestMarket = this.marketService.getNearestMarketInSystemThatTradesItem(waypoint, deposit.symbol, true);
+				if (!nearestMarket) return total;
+
+				const distance = LocXY.getDistance(nearestMarket, waypoint);
+				const fuelCost = distance * 2 / 20;
+				const marketItem = this.marketService.getItemAtMarket(nearestMarket.symbol, deposit.symbol);
+				if (!marketItem) return total;
+
+				let value = marketItem.sellPrice;
+				if (this.contract && ContractService.getContractDeliverable(deposit.symbol, this.contract)) {
+					// Favor surveys that lead to resources needed for a contract
+					return total + value * 2 - fuelCost;
 				}
-				return total + value;
+
+				return total + value - fuelCost;
 			}, 0);
-			surveyAverages[survey.symbol] = sum / survey.deposits.length;
+
+			const averagePrice = sum / survey.deposits.length;
+			surveyAverages[survey.symbol] = isNaN(averagePrice) ? 0 : averagePrice;
 		});
 
 		// Find the survey with the highest average price per unit
@@ -781,7 +782,8 @@ export class AutomationService {
 
 		for (const survey of surveys) {
 			const averagePrice = surveyAverages[survey.symbol];
-			if (averagePrice !== undefined && averagePrice > highestAveragePrice) {
+
+			if (averagePrice > highestAveragePrice) {
 				highestAverageSurvey = survey;
 				highestAveragePrice = averagePrice;
 			}

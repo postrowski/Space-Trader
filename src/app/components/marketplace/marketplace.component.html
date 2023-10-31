@@ -1,6 +1,6 @@
-<h1>Marketplace {{marketplace?.symbol}}</h1>
+<h1>Marketplace {{waypoint?.symbol}}</h1>
 <div class="text-container">
-	<div *ngIf="marketplace != null">
+	<div *ngIf="waypoint != null">
 
 		<div>
 			<h2>Trade Goods</h2>
@@ -18,48 +18,16 @@
 					(click)="selectTradeItem(tradeGood)">
 					<td title="{{tradeGood.description}}">{{tradeGood.name}}</td>
 					<td class="centered">{{tradeGood.type}}</td>
-					<td class="numeric">{{tradeGood.tradeVolume}}</td>
-					<td class="centered">{{tradeGood.supply}}</td>
-					<td class="numeric">{{tradeGood.purchasePrice | currency : 'USD' : 'symbol' : '1.0-0'}}</td>
-					<td class="numeric">{{tradeGood.sellPrice | currency : 'USD' : 'symbol' : '1.0-0'}}</td>
+					<td class="numeric">{{tradeGood.purchasePrice == 0 ? '???' : tradeGood.tradeVolume}}</td>
+					<td class="centered">{{tradeGood.purchasePrice == 0 ? '???' : tradeGood.supply}}</td>
+					<td class="numeric">{{tradeGood.purchasePrice == 0 ? '???' : (tradeGood.purchasePrice | currency : 'USD' : 'symbol' : '1.0-0')}}</td>
+					<td class="numeric">{{tradeGood.purchasePrice == 0 ? '???' : (tradeGood.sellPrice | currency : 'USD' : 'symbol' : '1.0-0')}}</td>
 				</tr>
 			</table>
 			<div *ngIf="selectedTradeItem">
 				Qty:<input type="number" [(ngModel)]="buyTradeQty">
 				<button (click)="onBuyTrade()">buy</button>
 			</div>
-		</div>
-
-
-
-		<div *ngIf="marketplace.transactions">
-			<div (click)="showTransactions = !showTransactions" class="link">
-				<h2 *ngIf="showTransactions">Transactions</h2>
-				<h2 *ngIf="!showTransactions">Transactions...</h2>
-			</div>
-			
-			<table *ngIf="marketplace != null && showTransactions">
-				<tr>
-					<th>Waypoint Symbol</th>
-					<th>Ship Symbol</th>
-					<th>Trade Symbol</th>
-					<th>Type</th>
-					<th>Units</th>
-					<th>Price Per Unit</th>
-					<th>Total Price</th>
-					<th>Timestamp</th>
-				</tr>
-				<tr *ngFor="let transaction of marketplace.transactions">
-					<td>{{ transaction.waypointSymbol}}</td>
-					<td>{{ transaction.shipSymbol}}</td>
-					<td>{{ transaction.tradeSymbol}}</td>
-					<td>{{ transaction.type}}</td>
-					<td>{{ transaction.units}}</td>
-					<td>{{ transaction.pricePerUnit}}</td>
-					<td>{{ transaction.totalPrice}}</td>
-					<td>{{ transaction.timestamp}}</td>
-				</tr>
-			</table>
 		</div>
 		
 	</div>

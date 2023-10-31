@@ -2,7 +2,7 @@ import { Component, Input, OnInit } from '@angular/core';
 import { AccountService } from 'src/app/services/account.service';
 import { FleetService } from 'src/app/services/fleet.service';
 import { GalaxyService } from 'src/app/services/galaxy.service';
-import { MarketService } from 'src/app/services/market.service';
+import { MarketItemType, MarketService, UiMarketItem } from 'src/app/services/market.service';
 import { ModalService } from 'src/app/services/modal.service';
 import { Agent } from 'src/models/Agent';
 import { Market, MarketItem } from 'src/models/Market';
@@ -19,7 +19,7 @@ export class MarketplaceComponent implements OnInit{
 	waypoint: WaypointBase | null = null;
 	account: Agent | null = null;
 
-	marketplace?: Market;
+	marketItems: UiMarketItem[] = [];
 	goods: TypedMarketItem[] = [];
 	shipsAtWaypoint: Ship[] = [];
 	selectedShip: Ship | null = null;
@@ -68,36 +68,30 @@ export class MarketplaceComponent implements OnInit{
 	}
 
 	loadMarket() {
-		this.marketplace = undefined;
+		this.marketItems = [];
 		this.selectedCargoItem = null;
 		this.goods = [];
 		if (this.waypoint && this.hasMarketplace()) {
 			this.marketService.getMarketplace(this.waypoint.symbol, this.shipsAtWaypoint.length> 0)
 			                  .subscribe((response) => {
-				this.marketplace = response;
+				this.marketItems = response;
 				let goods: TypedMarketItem[] = [];
-				if (this.marketplace.tradeGoods) {
-					for (const trade of this.marketplace.tradeGoods) {
+				if (this.marketItems) {
+					for (const marketItem of this.marketItems) {
 						let item: TypedMarketItem = {
-							symbol: trade.symbol,
-							name: trade.symbol,
-							tradeVolume: trade.tradeVolume,
-							supply: trade.supply,
-							purchasePrice: trade.purchasePrice,
-							sellPrice: trade.sellPrice,
+							symbol: marketItem.symbol,
+							name: marketItem.symbol,
+							tradeVolume: marketItem.tradeVolume,
+							supply: marketItem.supply,
+							purchasePrice: marketItem.purchasePrice,
+							sellPrice: marketItem.sellPrice,
 							description: '',
-							type: '' 
+							type: MarketItemType[marketItem.type]
 						}
 						goods.push(item);
 					}
 				}
-				this.fillInType(this.marketplace.exports, goods, 'Export');
-				this.fillInType(this.marketplace.imports, goods, 'Import');
-				this.fillInType(this.marketplace.exchange, goods, 'Exchange');
 				this.goods = goods.sort((g1, g2) => {
-					//if (g1.type != g2.type) {
-					//	return this.compare(g1.type, g2.type);
-					//}
 					return this.compare(g1.symbol, g2.symbol);
 				});
 				return;
@@ -108,34 +102,6 @@ export class MarketplaceComponent implements OnInit{
 		if (s1 < s2) return -1;
 		if (s1 > s2) return 1;
 		return 0;
-	}
-	fillInType(items: MarketItem[], goods: TypedMarketItem[], type: string) {
-		for (const importItem of items) {
-			let found = false;
-			for (const good of goods) {
-				if (good.symbol == importItem.symbol) {
-					good.type = type;
-					good.name = importItem.name;
-					good.description = importItem.description;
-					found = true;
-					break;
-				}
-			}
-			if (!found) {
-				let good: TypedMarketItem = {
-					symbol: importItem.symbol,
-					name: importItem.name,
-					tradeVolume: 0,
-					supply: '???',
-					purchasePrice: 0,
-					sellPrice: 0,
-					description: importItem.description,
-					type: type 
-				}
-				goods.push(good);
-			}
-		}
-		
 	}
 	loadShips() {
 		this.fleetService.allShips$.subscribe((allShips) => {

@@ -43,7 +43,7 @@ export class ExplorationService {
 
 	waypointNeedsToBeExplored(waypoint: WaypointBase): boolean {
 		if (WaypointBase.hasMarketplace(waypoint) &&
-				this.marketService.getCachedMarketplace(waypoint.symbol, false) == null) {
+				!this.marketService.hasPriceData(waypoint.symbol)) {
 			return true;
 		}		
 		if (WaypointBase.hasShipyard(waypoint) &&
@@ -143,33 +143,136 @@ export class ExplorationService {
 		return null;
 	}
 
-	public static organizeRoute(waypoints: WaypointBase[], destination: LocXY): WaypointBase | null {
-		// for now, just go to the nearest uncharted waypoint:
-		waypoints.sort((w1, w2) => {
-			const d1 = LocXY.getDistanceSquared(destination, w1);
-			const d2 = LocXY.getDistanceSquared(destination, w2);
+	public static sortWaypointsByDistanceFrom(waypoints: WaypointBase[], fromLoc: LocXY) {
+		return [...waypoints].sort((w1, w2) => {
+			const d1 = LocXY.getDistanceSquared(fromLoc, w1);
+			const d2 = LocXY.getDistanceSquared(fromLoc, w2);
 			if (d1 < d2) return -1;
 			if (d1 > d2) return 1;
 			return 0;
 		});
-		const locs = [];
+	}
+	public static organizeRoute(waypoints: WaypointBase[], startingLoc: WaypointBase): WaypointBase | null {
+		if (waypoints.length == 1) {
+			// trivial case: only 1 waypoint to explore.
+			return waypoints[0];
+		}
+		waypoints = this.sortWaypointsByDistanceFrom(waypoints, startingLoc);
+		// for now, just go to the nearest uncharted waypoint:
+		return waypoints[0];
+		/*const locs = [];
 		for (let waypoint of waypoints) {
+			if ((waypoint.x == startingLoc.x) &&
+			    (waypoint.y == startingLoc.y) &&
+			    (waypoint.symbol !== startingLoc.symbol)) {
+				// Trivial case: there is a waypoint at our current location that needs to be explored
+				return waypoint;
+			}
 			locs.push(new LocXY(waypoint.x, waypoint.y));
 		}
+		locs.push(new LocXY(startingLoc.x, startingLoc.y));
 		const uniqueLocs = new Set(locs.filter(
 			(value, index, self) => self.findIndex((v) => v.x === value.x && v.y === value.y) === index
 		));
 
-		const route = LocXY.findShortestPath(destination, uniqueLocs);
-		if (route.length) {
-			const loc = route[1];
-			for (let waypoint of waypoints) {
-				if (loc.x == waypoint.x && loc.y == waypoint.y) {
-					return waypoint;
+		const route = LocXY.findShortestPath(startingLoc, uniqueLocs);
+		if (route.length > 1) {
+			let nextLoc = null;
+			for (let i=0 ; i< route.length ; i++) {
+				if (route[i].x == startingLoc.x && route[i].y == startingLoc.y) {
+					const indexA = i>0 ? i-1: route.length-1;
+					const indexB = (i+1)< route.length ? i+1: 0;
+					const waypointA = route[indexA];
+					const waypointB = route[indexB];
+					const distA = LocXY.getDistance(startingLoc, waypointA);
+					const distB = LocXY.getDistance(startingLoc, waypointB);
+					if (distA < distB) {
+						nextLoc = waypointA;
+					} else {
+						nextLoc = waypointB;
+					}
+					break;
 				}
 			}
+			if (nextLoc) {
+	 			for (let waypoint of waypoints) {
+ 					if (nextLoc.x == waypoint.x && nextLoc.y == waypoint.y) {
+ 						return waypoint;
+ 					}
+ 				}
+			}
 		}
-		return null;
+		return null;*/
 	}
 
+	static bestRouteTo(waypointFrom: WaypointBase, waypointTo: WaypointBase,
+					   system: System, marketService: MarketService,
+					   currentFuel: number, fuelCapacity: number,
+					   minimumFuelLeftAtDestination: number) : {path: WaypointBase[], cost: number} | null {
+		const path: WaypointBase[] = [];
+		let cost = 0;
+		const fuelCostByWaypointSymbol = marketService.getPricesForItemInSystemByWaypointSymbol(system.symbol, 'FUEL', true);
+		const waypointsInSystem = system.waypoints || [];
+		const fuelStationsInSystem = waypointsInSystem.filter((way) => fuelCostByWaypointSymbol.has(way.symbol));
+		fuelStationsInSystem.push(waypointTo);
+		const waypointsInDistOrder = this.sortWaypointsByDistanceFrom(fuelStationsInSystem, waypointFrom);
+		let maxDist = currentFuel;
+		const fuelCostAtFrom = fuelCostByWaypointSymbol.get(waypointFrom.symbol);
+		const fuelCostAtTo = fuelCostByWaypointSymbol.get(waypointTo.symbol);
+		if (fuelCostAtFrom) {
+			// We could refuel before we travel
+			// TODO: figure in the cost of this much fuel
+			maxDist = fuelCapacity;
+		}
+		if (!fuelCostAtTo) {
+			// If we can't refuel at our destination, reduce the distance we can go.
+			maxDist -= minimumFuelLeftAtDestination;
+		}
+		const maxDistSquared = maxDist * maxDist;
+		const reachableWaypoints = waypointsInDistOrder.filter((way) => LocXY.getDistanceSquared(waypointFrom, way) <= maxDistSquared);
+		if (reachableWaypoints.some((way) => way.symbol == waypointTo.symbol)) {
+			// simplest case: we can navigate directly to the destination
+			path.push(waypointTo);
+			cost = this.getCostToTravel(waypointFrom, waypointTo, fuelCostAtFrom || null, fuelCostAtTo || null,
+					                    currentFuel, minimumFuelLeftAtDestination);
+			return {path, cost};
+		}
+		// Consider each possible path:
+		let lowestCost = Infinity;
+		let bestRoute: {path: WaypointBase[], cost: number} | null = null;
+		for (let waypoint of reachableWaypoints) {
+			const fuelCostAtWaypoint = fuelCostByWaypointSymbol.get(waypoint.symbol);
+			const distanceToWaypoint = LocXY.getDistance(waypointFrom, waypoint);
+			let minimumFuelLeftAtWaypoint = minimumFuelLeftAtDestination + distanceToWaypoint;
+			const costToWaypoint = this.getCostToTravel(waypointFrom, waypoint, fuelCostAtFrom || null, fuelCostAtWaypoint || null,
+					                                    currentFuel, minimumFuelLeftAtWaypoint);
+			const route = this.bestRouteTo(waypoint, waypointTo, system, marketService,
+			                               currentFuel - distanceToWaypoint, fuelCapacity,
+										   minimumFuelLeftAtDestination);
+			if (route && (route.cost + costToWaypoint) < lowestCost) {
+				bestRoute = {path: [waypoint, ...route.path], cost: route.cost + costToWaypoint};
+				lowestCost = route.cost + costToWaypoint;
+			}
+		}
+		return bestRoute;
+	}
+	static getCostToTravel(waypointFrom: WaypointBase, waypointTo: WaypointBase,
+						   fuelCostAtFrom: number | null, fuelCostAtTo: number | null,
+					       currentFuel: number, minimumFuelLeftAtDestination: number) : number{
+		let cost = 0;
+		let fuelNeeded = LocXY.getDistance(waypointFrom, waypointTo);
+		if (fuelNeeded > currentFuel) {
+			const fuelToBuyAtFrom = (fuelNeeded - currentFuel);
+			if (fuelCostAtFrom) {
+				cost = fuelCostAtFrom * fuelToBuyAtFrom;
+			}
+			fuelNeeded -= fuelToBuyAtFrom;
+		}
+		const fuelRemainingAtTo = currentFuel - fuelNeeded;
+		const fuelToBuyAtTo = Math.min(0, minimumFuelLeftAtDestination - fuelRemainingAtTo);
+		if (fuelCostAtTo) {
+			cost += fuelCostAtTo * fuelToBuyAtTo;
+		}
+		return cost;
+	}
 }

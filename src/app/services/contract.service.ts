@@ -8,6 +8,8 @@ import { ShipCargo } from 'src/models/ShipCargo';
 import { FleetService } from './fleet.service';
 import { AccountService } from './account.service';
 import { Meta } from 'src/models/Meta';
+import { ShipCargoItem } from 'src/models/ShipCargoItem';
+import { ContractDeliverGood } from 'src/models/ContractDeliverGood';
 
 @Injectable({
 	providedIn: 'root'
@@ -165,6 +167,18 @@ export class ContractService implements OnInit {
 			this.accountService.updateAgent(response.data.agent);
 		}, (error) => {});
 		return observable;                     
+	}
+
+	static getContractDeliverable(tradeSymbol: string, contract: Contract): ContractDeliverGood | null {
+		for (let goods of contract.terms.deliver) {
+			if (goods.tradeSymbol == tradeSymbol) {
+				const remainingUnits = goods.unitsRequired - goods.unitsFulfilled;
+				if (remainingUnits > 0) {
+					return goods;
+				}
+			}
+		}
+		return null;
 	}
 
 }

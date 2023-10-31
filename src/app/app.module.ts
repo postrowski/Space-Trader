@@ -32,6 +32,7 @@ import { TimeFormatPipe } from './pipes/time-format.pipe';
 import { VerticalProgressBarComponent } from './components/vertical-progress-bar/vertical-progress-bar.component';
 import { WaypointBaseComponent } from './components/waypoint-base/waypoint-base.component';
 import { AutomationComponent } from './components/automation/automation.component';
+import { DiagnosticsComponent } from './components/diagnostics/diagnostics.component';
 @NgModule({
 	declarations: [
 		AppComponent,
@@ -59,6 +60,7 @@ import { AutomationComponent } from './components/automation/automation.componen
 		VerticalProgressBarComponent,
 		WaypointBaseComponent,
   AutomationComponent,
+  DiagnosticsComponent,
 	],
 	imports: [
 		BrowserAnimationsModule,

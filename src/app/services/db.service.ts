@@ -1,11 +1,11 @@
 import { Injectable } from '@angular/core';
-import Dexie from 'dexie';
+import { Dexie } from 'dexie';
 import { Agent } from 'src/models/Agent';
 import { JumpGate } from 'src/models/JumpGate';
-import { Market } from 'src/models/Market';
 import { Shipyard } from 'src/models/Shipyard';
 import { System } from 'src/models/System';
 import { Waypoint } from 'src/models/Waypoint';
+import { UiMarketItem } from './market.service';
 
 @Injectable({
 	providedIn: 'root',
@@ -18,7 +18,7 @@ export class DBService {
 	waypoints!: Dexie.Table<Waypoint, string>;
 	agent!: Dexie.Table<Agent, string>;
 	jumplinks!: Dexie.Table<JumpLink, string>;
-	markets!: Dexie.Table<Market, string>;
+	marketItems!: Dexie.Table<UiMarketItem, number>;
 	shipyards!: Dexie.Table<Shipyard, string>;
 	jumpgates!: Dexie.Table<JumpGate, string>;
 	agents!: Dexie.Table<AgentInfo, number>;
@@ -29,13 +29,13 @@ export class DBService {
 	}
 
 	public async initDatabase(): Promise<void> {
-		this.db = new Dexie('Space-TraderDB');
+		this.db = new Dexie('Spacetrader-DB');
 		this.db.version(1).stores({
 			systems: 'symbol, x, y',
 			waypoints: 'symbol,systemSymbol',
 			agent: 'symbol',
 			jumplinks: 'fromSymbol',
-			markets: 'symbol',
+			marketItems: '++id',
 			shipyards: 'symbol',
 			jumpgates: 'symbol',
 			agents: '++id',
@@ -51,7 +51,7 @@ export class DBService {
 		this.waypoints = this.db.table('waypoints');
 		this.agent = this.db.table('agent');
 		this.jumplinks = this.db.table('jumplinks');
-		this.markets = this.db.table('markets');
+		this.marketItems = this.db.table('marketItems');
 		this.shipyards = this.db.table('shipyards');
 		this.jumpgates = this.db.table('jumpgates');
 		this.agents = this.db.table('agents');
@@ -82,7 +82,7 @@ export class DBService {
 		this.waypoints.clear();
 		this.agent.clear();
 		this.jumplinks.clear();
-		this.markets.clear();
+		this.marketItems.clear();
 		this.shipyards.clear();
 		this.jumpgates.clear();
 		this.agents.clear();
@@ -157,14 +157,16 @@ export class DBService {
 		return this.waypoints.toArray();
 	}
 	
-	addMarket(market: Market) {
-		this.markets.put(market, market.symbol)
-			.then(() => {
-				console.log(`updated market: ${market}`);
-			})
-			.catch((error) => {
-				console.error('Error updating market:', error);
-			});
+	addMarketItems(marketItems: UiMarketItem[]) {
+		for (const marketItem of marketItems) {
+			this.marketItems.add(marketItem)
+				.then(() => {
+					console.log(`updated market: ${marketItem}`);
+				})
+				.catch((error) => {
+					console.error('Error updating market:', error);
+				});
+		}
 	}
 	addShipyard(shipyard: Shipyard) {
 		this.shipyards.put(shipyard, shipyard.symbol)

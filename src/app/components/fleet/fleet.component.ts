@@ -52,9 +52,11 @@ export class FleetComponent {
 	}
 
 	showShipType(ship: Ship) {
-		for (const type of this.shipTypes) {
-			if (type.frameName == ship.frame.name) {
-				return type.value;
+		if (this.shipTypes.some((st) => st.value)) {
+			for (const type of this.shipTypes) {
+				if (type.frameName == ship.frame.name) {
+					return type.value;
+				}
 			}
 		}
 		return true;

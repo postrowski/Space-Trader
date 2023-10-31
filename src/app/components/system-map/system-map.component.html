@@ -69,6 +69,7 @@
     <text [attr.x]="xOffset + waypoint.loc.x * scale + getTextLocationOffset(waypoint.base).x"
 			[attr.y]="yOffset + waypoint.loc.y * scale + getTextLocationOffset(waypoint.base).y"
 			[attr.text-anchor]="getTextAnchor(waypoint.base)"
+			*ngIf="getSize(waypoint.base) > 4"
 			[attr.font-size]="getSize(waypoint.base) + 6" [attr.fill]="waypoint.textColor"
 			(click)="systemClick(waypoint)" style="cursor: pointer;">
 	  <title>{{ waypoint.base.type }} {{waypoint.base.symbol}} - [{{waypoint.base.x}}, {{waypoint.base.y}}]</title>
@@ -89,15 +90,15 @@
     </text>
     <!-- decorations for the waypoint -->
   	<text *ngIf="hasShipyard(waypoint.base)"
-		[attr.x]="xOffset + waypoint.loc.x * scale + 8+getSize(waypoint.base)"
-		[attr.y]="yOffset + waypoint.loc.y * scale"
+		[attr.x]="xOffset + waypoint.loc.x * scale + 5+getSize(waypoint.base)"
+		[attr.y]="yOffset + waypoint.loc.y * scale + 2"
 		[attr.font-size]="8+getSize(waypoint.base)" fill="#4444FF"
 		(click)="systemClick(waypoint)"
 		style="cursor: pointer;">
 	     <title>shipyard</title>⚓</text>
 	<text *ngIf="hasMarketplace(waypoint.base)"
-		[attr.x]="xOffset + waypoint.loc.x * scale -8-getSize(waypoint.base)"
-		[attr.y]="yOffset + waypoint.loc.y * scale"
+		[attr.x]="xOffset + waypoint.loc.x * scale -5-getSize(waypoint.base)"
+		[attr.y]="yOffset + waypoint.loc.y * scale + 2"
 		[attr.font-size]="8+getSize(waypoint.base)" fill="#FFD700" text-anchor="end"
 		(click)="systemClick(waypoint)" style="cursor: pointer;">
 	      <title>Market</title>$</text>

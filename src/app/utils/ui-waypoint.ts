@@ -152,11 +152,13 @@ export class UiWaypoint {
 		[-150, -110, -75, -20, 25, 70, 110, 160] // 40, 35, 55, 45, 45, 40, 50
 		];	
 	static getIndexOffset(index: number, total: number, size: number): {x:number, y: number} {
-		const angle = this.anglesByOrbit[total][index];
+		const angle = this.anglesByOrbit[total][index] * Math.PI / 180;
 		// Calculate x and y
-		const x = (size/2+index) * Math.cos(angle * (Math.PI / 180))/2;
-		const y = (size/2+index) * Math.sin(angle * (Math.PI / 180))/2;
+		const radius = (size/2+index);
+		const x = radius * Math.cos(angle);
+		const y = radius * Math.sin(angle) * -1;
 		return {x, y};
 	}
-	
+	// sin(0) = 0, sin(90) = 1
+	// cos(0) = 1, cos(90) = 0
 }

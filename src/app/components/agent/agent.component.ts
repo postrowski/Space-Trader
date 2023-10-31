@@ -54,7 +54,7 @@ export class AgentComponent {
 	}
 
 	onDeleteDataBase() {
-		const userResponse = confirm("Are you sure you want to reset the database?");
+		const userResponse = confirm("Are you sure you want to reset the database?\n This will remove your agent token!");
 		if (userResponse) {
 			this.dbService.deleteDatabase();
 		}

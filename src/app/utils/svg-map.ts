@@ -1,4 +1,5 @@
 import { AfterViewInit, Injectable } from "@angular/core";
+import { LocXY } from "src/models/LocXY";
 
 @Injectable({
   providedIn: 'root' // Or another Angular module where you want to provide this utility
@@ -102,4 +103,46 @@ export abstract class SvgMap implements AfterViewInit {
 		}
 	}
 	
+	centerOnLocation(x: number, y: number) {
+		this.animationStartLoc = new LocXY(this.xOffset, this.yOffset);
+		this.animationStopLoc = new LocXY(this.width/2 - x * this.scale, this.height/2 - y* this.scale);
+		const dx = Math.abs(this.animationStartLoc.x - this.animationStopLoc.x);
+		const dy = Math.abs(this.animationStartLoc.x - this.animationStopLoc.x);
+		if ((dx > this.width/2) || (dy > this.height/2)) {
+			this.animate();
+		}
+	}
+	
+	locationAnimation: any;
+	animationStartLoc: LocXY | undefined;
+	animationStopLoc: LocXY | undefined;
+	animationBegin: number | undefined;
+	animationDuration = 1500; // in milliseconds
+
+	private stopAnimation() {
+		if (this.locationAnimation) {
+			clearInterval(this.locationAnimation);
+			this.locationAnimation = null;
+		}
+	}
+	easeInOutCubic(t : number) {
+		return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+	}
+	
+	private animate() {
+		this.stopAnimation();
+		this.animationBegin = Date.now();
+		this.locationAnimation = setInterval(() => {
+			if (this.animationBegin && this.animationStopLoc && this.animationStartLoc) {
+				let t = (Date.now() - this.animationBegin) / this.animationDuration;
+				t = Math.min(Math.max(t, 0), 1);
+				const tt = this.easeInOutCubic(t);
+				this.xOffset = this.animationStartLoc.x + (this.animationStopLoc.x - this.animationStartLoc.x) * tt;
+				this.yOffset = this.animationStartLoc.y + (this.animationStopLoc.y - this.animationStartLoc.y) * tt;
+				if (t >= 1) {
+					this.stopAnimation();
+				}
+			}
+		}, 100);
+	}
 }

@@ -17,34 +17,8 @@ import { GalaxyService } from '../../services/galaxy.service';
 export class SystemMapComponent extends SvgMap {
 
 	uiWaypoints: UiWaypoint[] = [];
-	
 	_system: System | null | undefined = null;
-	get system(): System | null | undefined{
-		return this._system;
-	}
-	set system(value: System | null | undefined) {
-		// Custom logic to execute when ship is set
-		this._system = value;
-		this.selectedWaypoint = null;
-		// recompute the scale for this system:
-		if (this._system?.waypoints?.length) {
-			const max = this._system.waypoints.reduce((maxValue, waypoint) => {
-				const x = Math.abs(waypoint.x);
-				const y = Math.abs(waypoint.y);
-				return Math.max(maxValue, x, y);
-			}, 0);
-			this.baseScale = this.scale = (Math.max(this.width, this.height)/2) / (max + 10);
-		} else {
-			this.baseScale = this.scale = 1;
-		}
-		this.xOffset = this.width/2;
-		this.yOffset = this.height/2;
-		this.objectScale = .25;
-		this.uiWaypoints = UiWaypoint.getUiWaypointsFromSystem(this._system);
-	}
-	
 	starField: {x: number, y: number, size: number, color: string}[] = [];
-	
 	selectedWaypoint: UiWaypoint | null = null;
 	selectedShip: Ship | null = null;
 	shipLocBySymbol: { [shipSymbol: string]: {system: string, loc: LocXY} } = {};
@@ -59,6 +33,7 @@ export class SystemMapComponent extends SvgMap {
 			for (let uiWaypoint of this.uiWaypoints) {
 				if (uiWaypoint.base.symbol == waypoint?.symbol) {
 					this.selectedWaypoint = uiWaypoint;
+					this.centerOnLocation(uiWaypoint.loc.x, uiWaypoint.loc.y);
 					break;
 				}
 			}
@@ -87,6 +62,30 @@ export class SystemMapComponent extends SvgMap {
 		this.startAnimationOffset();
 	}
 
+	get system(): System | null | undefined{
+		return this._system;
+	}
+	set system(value: System | null | undefined) {
+		// Custom logic to execute when ship is set
+		this._system = value;
+		this.selectedWaypoint = null;
+		// recompute the scale for this system:
+		if (this._system?.waypoints?.length) {
+			const max = this._system.waypoints.reduce((maxValue, waypoint) => {
+				const x = Math.abs(waypoint.x);
+				const y = Math.abs(waypoint.y);
+				return Math.max(maxValue, x, y);
+			}, 0);
+			this.baseScale = this.scale = (Math.max(this.width, this.height)/2) / (max + 10);
+		} else {
+			this.baseScale = this.scale = 1;
+		}
+		this.xOffset = this.width/2;
+		this.yOffset = this.height/2;
+		this.objectScale = .25;
+		this.uiWaypoints = UiWaypoint.getUiWaypointsFromSystem(this._system);
+	}
+	
 	private startAnimationOffset() {
 		if (this.animationInterval) {
 			clearInterval(this.animationInterval);
@@ -253,9 +252,9 @@ export class SystemMapComponent extends SvgMap {
 			return new LocXY(0, -5 -objectSize/2);
 		}
 		if (waypoint.type === 'MOON' && this._system) {
-			return new LocXY(3 + objectSize/2, -objectSize/2);
+			return new LocXY(1 + objectSize/2, -objectSize/2);
 		}
-		return new LocXY(0, objectSize + fontSize / 2 + 5);
+		return new LocXY(0, objectSize + fontSize / 2);
 	}
 	
 	hasMarketplace(waypoint: WaypointBase | null) {

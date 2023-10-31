@@ -9,10 +9,12 @@
 	<button (click)="onRegisterAccount()" [attr.enabled]='selectedFaction'>Register</button>
 </div>
 	<button (click)="onDeleteDataBase()">Delete Database</button>
-<div *ngIf='accountService.accountValid'>
+<div *ngIf='accountService.token'>
 	<button (click)="accountService.fetchAgent()" class="refresh-button">
 		<img src="assets/refresh.png" height="16"/>
 	</button>
+</div>
+<div *ngIf='accountService.accountValid'>
 	<table>
 		<tr>
 			<th>Token</th>

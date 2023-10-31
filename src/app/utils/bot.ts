@@ -1,7 +1,5 @@
 import { Contract } from "src/models/Contract";
-import { ContractDeliverGood } from "src/models/ContractDeliverGood";
 import { LocXY } from "src/models/LocXY";
-import { Market } from "src/models/Market";
 import { Ship } from "src/models/Ship";
 import { ShipCargoItem } from "src/models/ShipCargoItem";
 import { Survey } from "src/models/Survey";
@@ -10,6 +8,8 @@ import { AutomationService } from "../services/automation.service";
 import { ExplorationService } from "../services/exploration.service";
 import { FleetService } from "../services/fleet.service";
 import { GalaxyService } from "../services/galaxy.service";
+import { ContractService } from "../services/contract.service";
+import { MarketService } from "../services/market.service";
 
 export enum Role {
 	Miner,
@@ -28,6 +28,7 @@ export class Bot {
     currentStep: ExecutionStep | null = null;
     errorCount = 0;
     fleetService!: FleetService;
+	marketService: MarketService;
     explorationService!: ExplorationService;
     
 	constructor(ship: Ship,
@@ -35,15 +36,16 @@ export class Bot {
 		this.ship = ship;
 		this.automationService = automationService;
 		this.fleetService = this.automationService.fleetService;
+		this.marketService = this.automationService.marketService;
 		this.explorationService = this.automationService.explorationService;
 		this.determineRole();
 	}
 	
 	determineRole() {
-		const hasSensor = Ship.containsMount(this.ship, 'MOUNT_SENSOR');
-		const hasMining = Ship.containsMount(this.ship, 'MOUNT_MINING_LASER');
+		const hasSensor   = Ship.containsMount( this.ship, 'MOUNT_SENSOR');
+		const hasMining   = Ship.containsMount( this.ship, 'MOUNT_MINING_LASER');
 		const hasRefinery = Ship.containsModule(this.ship, 'MODULE_ORE_REFINERY');
-		const hasCargo = Ship.containsModule(this.ship, 'MODULE_CARGO_HOLD_I');
+		const hasCargo    = Ship.containsModule(this.ship, 'MODULE_CARGO_HOLD_I');
 		if (hasRefinery) {
 			this.role = Role.Refinery;
 		} else if (hasSensor && hasMining) {
@@ -91,30 +93,67 @@ export class Bot {
 				}
 			}
 		}
-		console.error(`Can't determine how to get ship ${this.ship.symbol} from ${this.ship.nav.systemSymbol} to ${systemSymbol}!`);
+		console.error(`Can't determine how to get ship ${this.ship.symbol} from ${this.ship.nav.systemSymbol} to system ${systemSymbol}!`);
 	}
-	
 	navigateTo(waypoint: WaypointBase){
-		if (this.ship.nav.waypointSymbol != waypoint.symbol) {
-			const systemSymbol = GalaxyService.getSystemSymbolFromWaypointSymbol(waypoint.symbol);
-			if (this.ship.nav.systemSymbol != systemSymbol) {
-				this.navigateToSystem(systemSymbol);
-				return;
-			}
-			this.orbit();
-			const dist = LocXY.getDistance(this.ship.nav.route.destination, waypoint);
-			const mustDrift = dist > this.ship.fuel.current;
-			let mode = mustDrift ? 'DRIFT' : 'CRUISE';
-			this.setFlightMode(mode);
-				
-			this.currentStep = new ExecutionStep(this, `Navigate to ${waypoint.symbol}`);
-			this.fleetService.navigateShip(this.ship.symbol, waypoint.symbol).subscribe((response)=>{
-				this.completeStep();
-			}, (error) => {
-				this.onError(error);
-			});
-			throw this.currentStep;
+		if (this.ship.nav.waypointSymbol == waypoint.symbol) {
+			return;
 		}
+		const systemSymbol = GalaxyService.getSystemSymbolFromWaypointSymbol(waypoint.symbol);
+		if (this.ship.nav.systemSymbol != systemSymbol) {
+			this.navigateToSystem(systemSymbol);
+			return;
+		}
+		const fuelPricesByWaypointSymbol = this.marketService.getPricesForItemInSystemByWaypointSymbol(systemSymbol, 'FUEL', true);
+		const hasFuelStation = fuelPricesByWaypointSymbol.has(this.ship.nav.route.destination.symbol);
+
+		const dist = LocXY.getDistance(this.ship.nav.route.destination, waypoint);
+		let mustDrift = dist > (this.ship.fuel.current - 2);
+		if (mustDrift && hasFuelStation && dist < this.ship.fuel.capacity - 2) {
+			this.refuel(100);
+		}
+		if (mustDrift) {
+			// Try to find an intermediate fuel station:
+			const system = this.automationService.galaxyService.getSystemBySymbol(systemSymbol);
+			if (system && system.waypoints) {
+				const fuelWaypoints = system.waypoints.filter((wp) => fuelPricesByWaypointSymbol.has(wp.symbol));
+				let maxRange = this.ship.fuel.current;
+				if (hasFuelStation) {
+					maxRange = this.ship.fuel.capacity;
+				}
+				const fuelWaypointsInRange = fuelWaypoints.filter((wp) => LocXY.getDistance(this.ship.nav.route.destination, wp) < maxRange);
+				if (fuelWaypointsInRange.length > 0) {
+					const fuelStationNearestToDest = ExplorationService.sortWaypointsByDistanceFrom(fuelWaypointsInRange, waypoint);
+					this.navigateTo(fuelStationNearestToDest[0]);
+				}
+			}
+
+			// TODO: get this bestRouteTo working!
+			/*				const system = this.automationService.galaxyService.getSystemBySymbol(this.ship.nav.waypointSymbol);
+							const waypointFrom = this.automationService.galaxyService.getWaypointByWaypointSymbol(this.ship.nav.waypointSymbol);
+							if (waypointFrom && system) {
+								const route = ExplorationService.bestRouteTo(waypointFrom, waypoint, system, this.marketService,
+																	this.ship.fuel.current, this.ship.fuel.capacity, 0);
+								if (route && route.path.length>0) {
+									const waypointTo = this.automationService.galaxyService.getWaypointByWaypointSymbol(route.path[0].symbol);
+									if (waypointTo) {
+										this.navigateTo(waypointTo);
+									}
+								}
+							}*/
+			console.error(`Couldn't get to ${waypoint.symbol} at (${waypoint.x}, ${waypoint.y}) without drifting!`)
+		}
+		
+		this.orbit();
+		this.setFlightMode(mustDrift ? 'DRIFT' : 'CRUISE');
+
+		this.currentStep = new ExecutionStep(this, `Navigate to ${waypoint.symbol}`);
+		this.fleetService.navigateShip(this.ship.symbol, waypoint.symbol).subscribe((response) => {
+			this.completeStep();
+		}, (error) => {
+			this.onError(error);
+		});
+		throw this.currentStep;
 	}
 
 	jumpTo(waypointSymbol: string){
@@ -132,6 +171,10 @@ export class Bot {
 	refuel(minPercent: number){
 		const currentPercent = 100 * this.ship.fuel.current / this.ship.fuel.capacity;
 		if (currentPercent < minPercent) {
+			// make sure our current location trades in fuel
+			if (!this.marketService.getItemAtMarket(this.ship.nav.waypointSymbol, 'FUEL')) {
+				return;
+			}
 			this.dock();
 			this.currentStep = new ExecutionStep(this, `refueling`);
 			const qty = (this.ship.fuel.capacity - this.ship.fuel.current);
@@ -245,56 +288,59 @@ export class Bot {
 			}, (error) => {
 				this.onError(error);
 			});
+			throw this.currentStep;
 		}
 	}
-	buyModuleForUpgrade(market: Market, agentCredits: number) {
+	buyModuleForUpgrade(agentCredits: number) {
 		const mountToBuy: string | null = this.getNeededUpgrade();
 		if (mountToBuy == null) {
 			return;
 		}
-		this.buyItems(market, mountToBuy, 1, agentCredits);
+		this.buyItems(mountToBuy, 1, agentCredits);
 	}
-	buyContractGoods(market: Market, agentCredits: number, contract: Contract) {
+	buyContractGoods(agentCredits: number, contract: Contract) {
 		for (let goods of contract.terms.deliver) {
+			if (goods.tradeSymbol.endsWith("_ORE")) {
+				// we should mine this, instead of buying it!
+				continue;
+			}
 			let remainingUnits = goods.unitsRequired - goods.unitsFulfilled;
 			if (remainingUnits > 0) {
-				this.buyItems(market, goods.tradeSymbol, remainingUnits, agentCredits);
+				this.buyItems(goods.tradeSymbol, remainingUnits, agentCredits);
 			}
 		}
 		return null;
 	}
 	
-	buyItems(market: Market, itemToBuy: string, quantity: number, agentCredits: number) {
+	buyItems(itemToBuy: string, quantity: number, agentCredits: number) {
 		// If we already have this amount in our inventory, don't buy any more:
 		for (let inv of this.ship.cargo.inventory) {
 			if ((inv.symbol === itemToBuy) && (inv.units >= quantity)) {
 				return;
 			}
 		}
-
-		let forSale = false;
-		for (let inv of market?.tradeGoods || []) {
-			if (inv.purchasePrice > agentCredits) {
-				continue;
-			}
-			if (inv.symbol === itemToBuy) {
-				forSale = true;
-				if (quantity > inv.tradeVolume) {
-					quantity = inv.tradeVolume;
-				}
-				break;
-			}
+		// Only try to buy this if its traded here
+		const marketItem = this.marketService
+		                       .getItemAtMarket(this.ship.nav.waypointSymbol, itemToBuy);
+		
+		if (!marketItem) {
+			return;
 		}
-		if (forSale) {
-			this.dock();
-			this.currentStep = new ExecutionStep(this, `buying item ${itemToBuy}`);
-			this.fleetService.purchaseCargo(this.ship.symbol, itemToBuy, quantity)
-			                 .subscribe((response) => {
-				this.completeStep();
-			}, (error) => {
-				this.onError(error);
-			});
+		if (marketItem.purchasePrice > agentCredits) {
+			return;
 		}
+		if (quantity > marketItem.tradeVolume) {
+			quantity = marketItem.tradeVolume;
+		}
+		this.dock();
+		this.currentStep = new ExecutionStep(this, `buying ${quantity} item(s) of ${itemToBuy}`);
+		this.fleetService.purchaseCargo(this.ship.symbol, itemToBuy, quantity)
+		                 .subscribe((response) => {
+			this.completeStep();
+		}, (error) => {
+			this.onError(error);
+		});
+		throw this.currentStep;
 	}
 
 	findOtherShipInSameLocation(otherShips: Bot[], docked: boolean) : Bot[] {
@@ -311,7 +357,7 @@ export class Bot {
 		}
 		return nearbyShips;
 	}
-	sellAll(contract: Contract | null, market: Market, otherShips: Bot[]) {
+	sellAll(contract: Contract | null, otherShips: Bot[]) {
 		if (this.ship.nav.status === 'IN_TRANSIT') {
 			return
 		}
@@ -328,7 +374,7 @@ export class Bot {
 				continue;
 			}
 			if (contract) {
-				const contractDeliverable = this.getContractDeliverable(inv, contract);
+				const contractDeliverable = ContractService.getContractDeliverable(inv.symbol, contract);
 				if (contractDeliverable) {
 					for (let otherShip of otherShips) {
 						if (otherShip == this ||
@@ -358,12 +404,10 @@ export class Bot {
 					break;
 				}
 			}
-			// make sure the market will buy this item.
-			for (let item of market.tradeGoods) {
-				if (item.symbol === inv.symbol) {
-					this.sellCargo(inv.symbol, inv.units);
-					break;
-				}
+			// make sure the market trades in this item.
+			if (this.marketService
+			        .getItemAtMarket(this.ship.nav.waypointSymbol, inv.symbol)) {
+				this.sellCargo(inv.symbol, inv.units);
 			}
 		}
 	}
@@ -375,7 +419,7 @@ export class Bot {
 			if (inv.units <= 0) {
 				continue;
 			}
-			const contractDeliverable = this.getContractDeliverable(inv, contract);
+			const contractDeliverable = ContractService.getContractDeliverable(inv.symbol, contract);
 			if (!contractDeliverable) {
 				continue;
 			}
@@ -404,36 +448,18 @@ export class Bot {
 			}
 		}
 	}
-	getContractDeliverable(inv: ShipCargoItem, contract: Contract): ContractDeliverGood | null {
-		for (let goods of contract.terms.deliver) {
-			if (goods.tradeSymbol == inv.symbol) {
-				const remainingUnits = goods.unitsRequired - goods.unitsFulfilled;
-				if (remainingUnits === 0) {
-					continue;
-				}
-				return goods;
-			}
-		}
-		return null;
-	}
 	sellCargo(symbol: string, units: number) {
 		this.dock();
 		this.currentStep = new ExecutionStep(this, `sell ${units} units of ${symbol}`);
 		this.fleetService.sellCargo(this.ship.symbol, symbol, units).subscribe((response) => {
 			this.completeStep();
-			const transaction = response.data.transaction;
-			let currentPriceByTradeSymbol = this.automationService.marketService.currentPriceByTradeSymbolByWaypoint[transaction.waypointSymbol];
-			if (!currentPriceByTradeSymbol) {
-				currentPriceByTradeSymbol = {};
-				this.automationService.marketService.currentPriceByTradeSymbolByWaypoint[transaction.waypointSymbol] = currentPriceByTradeSymbol;
-			}
-			currentPriceByTradeSymbol[transaction.tradeSymbol] = transaction.pricePerUnit;
+			this.marketService.updatePrices(response.data.transaction);
 		}, (error) => {
 			this.onError(error);
 		});
 		throw this.currentStep;
-
 	}
+	
 	transferCargo(otherShip: Ship, inv:ShipCargoItem) {
 		let freeSpace = otherShip.cargo.capacity - otherShip.cargo.units;
 		if (freeSpace > 0) {
@@ -470,7 +496,7 @@ export class Bot {
 			throw this.currentStep;
 		}
 	}
-	gatherOre(market: Market | null, otherBots: Bot[]) {
+	gatherOre(otherBots: Bot[]) {
 		for (let otherBot of otherBots) {
 			if (otherBot.ship.nav.waypointSymbol == this.ship.nav.waypointSymbol) {
 				if (otherBot.ship.nav.status == this.ship.nav.status) {
@@ -482,16 +508,6 @@ export class Bot {
 				}
 			}
 		}
-/*		if (market) {
-			const freeSpace = this.ship.cargo.capacity - this.ship.cargo.units;
-			for (let item of market.tradeGoods || []) {
-				if (item.purchasePrice == 3) {
-					if (item.symbol.endsWith("_ORE")) {
-						this.purchaseCargo(item.symbol, freeSpace);
-					}
-				}
-			}
-		}*/
 	}
 	purchaseCargo(itemSymbol: string, itemQty: number) {
 		this.currentStep = new ExecutionStep(this, `buying ${itemQty} of ${itemSymbol}`);
@@ -563,13 +579,13 @@ export class Bot {
 	negotiateContract() {
 		if (this.automationService.agent?.headquarters == this.ship.nav.waypointSymbol) {
 			this.dock();
-			const step = new ExecutionStep(this, `Negotiating contract`);
+			this.currentStep = new ExecutionStep(this, `Negotiating contract`);
 			this.automationService.contractService.negotiateContract(this.ship.symbol).subscribe((response) => {
 				this.completeStep();
 			}, (error) => {
 				this.onError(error);
 			});
-			throw step;
+			throw this.currentStep;
 		}
 	}
 	exploreSystems() {
@@ -596,11 +612,11 @@ export class Bot {
 		}
 	}
 
-	traverseWaypoints(waypoints: WaypointBase[]) {
+	traverseWaypoints(waypoints: WaypointBase[], startingLoc: WaypointBase) {
 		if (waypoints.length == 1) {
 			this.navigateTo(waypoints[0]);
 		}
-		const loc = ExplorationService.organizeRoute(waypoints, this.ship.nav.route.destination);
+		const loc = ExplorationService.organizeRoute(waypoints, startingLoc);
 		if (loc) {
 			this.navigateTo(loc);
 		}

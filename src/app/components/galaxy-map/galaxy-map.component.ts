@@ -55,6 +55,9 @@ export class GalaxyMapComponent extends SvgMap {
 		super.componentName = "galaxy-map-svg";
 		this.galaxyService.activeSystem$.subscribe((system) => {
 			this.selectedSystem = system;
+			if (system) {
+				this.centerOnLocation(system.x, system.y);
+			}
 		});
 	    this.dbService.initDatabase().then(() => {
 	        liveQuery(() => this.dbService.systems.toArray())

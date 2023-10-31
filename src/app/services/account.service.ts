@@ -13,8 +13,7 @@ import { DBService } from './db.service';
 })
 export class AccountService {
 	private apiUrl = 'https://api.spacetraders.io/v2/';
-	token = "";
-  //token = "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZGVudGlmaWVyIjoiQkxBQ0tSQVQiLCJ2ZXJzaW9uIjoidjIuMS4wIiwicmVzZXRfZGF0ZSI6IjIwMjMtMTAtMjgiLCJpYXQiOjE2OTg1MTQwMzksInN1YiI6ImFnZW50LXRva2VuIn0.lHZyexTjEbauwFD5vhsOPnxlHcesyjTUuED6DZfT40LCFEVF-AoiwzvM0lhA58uDKZrb9FogGSfeCDGvdpge-M_FLSo-a3PRWWITQRGeS6460j27fR5Pv3rkTBn0DU-pbY6xS7e8b-UTvwzHBOfbAvq-4AanjPX-rOh1JKUlvbkRPfI7HedvL8EQtvZTO7a5bWKkwGs4uopLzZlcRC5Aj1WhSwiKq22mi-Hv_KlXNUeKA0L5LLzyzHUq21vx3gHd-XV2vUhD5H_793y1DLmEGi4kjtEUJYte4K1V-8sgkOGCU6do0K8lzQNXg2LMV87z_X2FP2mMZiKvRsnMHE_kuQ"
+	token = "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZGVudGlmaWVyIjoiQkxBQ0tSQVQiLCJ2ZXJzaW9uIjoidjIuMS4wIiwicmVzZXRfZGF0ZSI6IjIwMjMtMTAtMjgiLCJpYXQiOjE2OTg1MTQwMzksInN1YiI6ImFnZW50LXRva2VuIn0.lHZyexTjEbauwFD5vhsOPnxlHcesyjTUuED6DZfT40LCFEVF-AoiwzvM0lhA58uDKZrb9FogGSfeCDGvdpge-M_FLSo-a3PRWWITQRGeS6460j27fR5Pv3rkTBn0DU-pbY6xS7e8b-UTvwzHBOfbAvq-4AanjPX-rOh1JKUlvbkRPfI7HedvL8EQtvZTO7a5bWKkwGs4uopLzZlcRC5Aj1WhSwiKq22mi-Hv_KlXNUeKA0L5LLzyzHUq21vx3gHd-XV2vUhD5H_793y1DLmEGi4kjtEUJYte4K1V-8sgkOGCU6do0K8lzQNXg2LMV87z_X2FP2mMZiKvRsnMHE_kuQ"
 	errorMessages: string[] = [];
 	accountValid = false;
 
@@ -78,6 +77,10 @@ export class AccountService {
 				(response: any) => {
 					this.accountValid = true;
 					this.updateAgent(response.data);
+					this.dbService.agents.add({
+						agentToken: this.token,
+						agentRole: 'primary'
+					});
 				},
 				(error: any) => {
 					while (error.error) {

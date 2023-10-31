@@ -1,0 +1,21 @@
+<h2>Messages</h2>
+<table>
+	<tr>
+		<td *ngFor="let show of showShip">
+			<input type="checkbox" [(ngModel)]="show.value">{{show.shipSymbol ? show.shipSymbol.toLowerCase() : 'None'}}
+		</td>
+	</tr>
+</table>
+<button (click)="onClear()">Clear Messages</button>
+<table>
+	<tr>
+		<th>Ship</th>
+		<th>Time</th>
+		<th>Message</th>
+	</tr>
+	<tr *ngFor="let row of allMessages">
+		<td *ngIf="showMessage(row)">{{row.shipSymbol}}</td>
+		<td *ngIf="showMessage(row)">{{row.timestamp.toLocaleTimeString()}}</td>
+		<td *ngIf="showMessage(row)">{{row.message}}</td>
+	</tr>
+</table>

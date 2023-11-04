@@ -1,6 +1,7 @@
 import { Component, Input, OnInit } from '@angular/core';
 import { FleetService } from 'src/app/services/fleet.service';
 import { GalaxyService } from 'src/app/services/galaxy.service';
+import { MarketService } from 'src/app/services/market.service';
 import { ModalService } from 'src/app/services/modal.service';
 import { Ship } from 'src/models/Ship';
 import { ShipModule } from 'src/models/ShipModule';
@@ -26,6 +27,7 @@ export class ShipComponent implements OnInit {
 	
 	constructor(public galaxyService: GalaxyService,
 	            public fleetService: FleetService,
+	            public marketService: MarketService,
 	            public modalService: ModalService) {}
 	
 	selectedModule: ShipModule | null = null; // Initialize selectedModule as null
@@ -66,16 +68,18 @@ export class ShipComponent implements OnInit {
 	}
 	onRefuel(ship: Ship) {
 		if (ship != null) {
-			this.fleetService.refuelShip(ship.symbol, ship.fuel.capacity - ship.fuel.current).subscribe((response) => {
-			});
+			this.marketService.refuelShip(ship.symbol, ship.fuel.capacity - ship.fuel.current)
+							  .subscribe((response) => {
+							  			 });
 		}
 	}
 	onRefine(ship: Ship) {
 		if (ship != null) {
 			for (let inv of ship.cargo.inventory) {
 				if (inv.symbol.endsWith("_ORE")) {
-					this.fleetService.shipRefine(ship.symbol, inv.symbol.slice(0, -4)).subscribe((response) => {
-					});
+					this.fleetService.shipRefine(ship.symbol, inv.symbol.slice(0, -4))
+									 .subscribe((response) => {
+									            });
 				}
 			}
 		}
@@ -88,8 +92,9 @@ export class ShipComponent implements OnInit {
 	}
 
 	onShipFlightModeChange(ship: Ship) {
-		this.fleetService.setFlightMode(ship.symbol, ship.nav.flightMode).subscribe((response) => {
-		});
+		this.fleetService.setFlightMode(ship.symbol, ship.nav.flightMode)
+		                 .subscribe((response) => {
+		                            });
 	}
 
 	timeUntil(date: string) {

@@ -20,7 +20,7 @@ export class AutomationComponent {
 		this.automationService.start();
 	}
 	onStep() {
-		this.automationService.step();
+		this.automationService.singleStep();
 	}
 	onStop() {
 		this.automationService.stop();

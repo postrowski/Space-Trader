@@ -1,4 +1,5 @@
 import { Component } from '@angular/core';
+import { AccountService } from 'src/app/services/account.service';
 import { AutomationService } from 'src/app/services/automation.service';
 import { LogMessage } from 'src/app/utils/log-message';
 
@@ -20,6 +21,11 @@ export class DiagnosticsComponent {
 				this.allShipSymbols.push(message.shipSymbol);
 				this.allShipSymbols.sort();
 				this.showShip.push({shipSymbol: message.shipSymbol, value: true});
+				this.showShip.sort((a, b) => {
+					if (a.shipSymbol < b.shipSymbol) return -1;
+					if (a.shipSymbol > b.shipSymbol) return 1;
+					return 0;
+				});
 			}
 		});
 	}

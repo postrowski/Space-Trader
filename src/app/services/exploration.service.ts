@@ -211,7 +211,7 @@ export class ExplorationService {
 					   minimumFuelLeftAtDestination: number) : {path: WaypointBase[], cost: number} | null {
 		const path: WaypointBase[] = [];
 		let cost = 0;
-		const fuelCostByWaypointSymbol = marketService.getPricesForItemInSystemByWaypointSymbol(system.symbol, 'FUEL', true);
+		const fuelCostByWaypointSymbol = marketService.getPricesForItemInSystemByWaypointSymbol(system.symbol, 'FUEL');
 		const waypointsInSystem = system.waypoints || [];
 		const fuelStationsInSystem = waypointsInSystem.filter((way) => fuelCostByWaypointSymbol.has(way.symbol));
 		fuelStationsInSystem.push(waypointTo);
@@ -233,7 +233,7 @@ export class ExplorationService {
 		if (reachableWaypoints.some((way) => way.symbol == waypointTo.symbol)) {
 			// simplest case: we can navigate directly to the destination
 			path.push(waypointTo);
-			cost = this.getCostToTravel(waypointFrom, waypointTo, fuelCostAtFrom || null, fuelCostAtTo || null,
+			cost = this.getCostToTravel(waypointFrom, waypointTo, fuelCostAtFrom?.purchasePrice || null, fuelCostAtTo?.purchasePrice || null,
 					                    currentFuel, minimumFuelLeftAtDestination);
 			return {path, cost};
 		}
@@ -244,7 +244,7 @@ export class ExplorationService {
 			const fuelCostAtWaypoint = fuelCostByWaypointSymbol.get(waypoint.symbol);
 			const distanceToWaypoint = LocXY.getDistance(waypointFrom, waypoint);
 			let minimumFuelLeftAtWaypoint = minimumFuelLeftAtDestination + distanceToWaypoint;
-			const costToWaypoint = this.getCostToTravel(waypointFrom, waypoint, fuelCostAtFrom || null, fuelCostAtWaypoint || null,
+			const costToWaypoint = this.getCostToTravel(waypointFrom, waypoint, fuelCostAtFrom?.purchasePrice || null, fuelCostAtWaypoint?.purchasePrice || null,
 					                                    currentFuel, minimumFuelLeftAtWaypoint);
 			const route = this.bestRouteTo(waypoint, waypointTo, system, marketService,
 			                               currentFuel - distanceToWaypoint, fuelCapacity,

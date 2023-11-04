@@ -4,7 +4,6 @@ import { BehaviorSubject, map, Observable, of, Subject } from 'rxjs';
 import { Agent } from 'src/models/Agent';
 import { Chart } from 'src/models/Chart';
 import { Cooldown } from 'src/models/Cooldown';
-import { MarketTransaction } from 'src/models/MarketTransaction';
 import { RefinementProduction } from 'src/models/RefinementProduction';
 import { ScannedShip } from 'src/models/ScannedShip';
 import { Ship } from 'src/models/Ship';
@@ -495,57 +494,6 @@ export class FleetService implements OnInit {
 			(`${this.apiUrlMyShips}/${shipSymbol}/scan/ships`,
 				{}, { headers });
 		return observable;
-	}
-
-	refuelShip(shipSymbol: string, units: number): Observable<{ data: {agent: Agent; fuel: ShipFuel; transaction: MarketTransaction }}> {
-		const headers = this.accountService.getHeader();
-		const body = {
-			units: units
-		}
-		const observable = this.http.post<{ data: {agent: Agent; fuel: ShipFuel; transaction: MarketTransaction }}>
-			(`${this.apiUrlMyShips}/${shipSymbol}/refuel`,
-				body, { headers })
-      		.pipe(shareReplay(1)); // Use the shareReplay operator so our service can subscribe, and so can the caller
-		observable.subscribe((response)=> {
-			const ship = this.getShipBySymbol(shipSymbol);
-			if (ship) {
-				ship.fuel.update(response.data.fuel);
-			}
-		}, (error) => {});
-		return observable;
-	}
-
-	sellCargo(shipSymbol: string, itemSymbol: string, itemQty: number): Observable<{ data: {agent: Agent; cargo: ShipCargo; transaction: MarketTransaction }}> {
-		const headers = this.accountService.getHeader();
-		const body = {
-  			symbol: itemSymbol,
-  			units: itemQty
-		}
-		const observable = this.http.post<{ data: {agent: Agent; cargo: ShipCargo; transaction: MarketTransaction }}>
-			(`${this.apiUrlMyShips}/${shipSymbol}/sell`,
-				body, { headers })
-      		.pipe(shareReplay(1)); // Use the shareReplay operator so our service can subscribe, and so can the caller
-		observable.subscribe((response)=> {
-			this.updateShipCargo(shipSymbol, response.data.cargo);
-			this.accountService.updateAgent(response.data.agent);
-		}, (error) => {});
-    	return observable;
-	}
-	purchaseCargo(shipSymbol: string, itemSymbol: string, itemQty: number): Observable<{ data: {agent: Agent; cargo: ShipCargo; transaction: MarketTransaction }}> {
-		const headers = this.accountService.getHeader();
-		const body = {
-  			symbol: itemSymbol,
-  			units: itemQty
-		}
-		const observable = this.http.post<{ data: {agent: Agent; cargo: ShipCargo; transaction: MarketTransaction }}>
-			(`${this.apiUrlMyShips}/${shipSymbol}/purchase`,
-				body, { headers })
-      		.pipe(shareReplay(1)); // Use the shareReplay operator so our service can subscribe, and so can the caller
-		observable.subscribe((response)=> {
-			this.updateShipCargo(shipSymbol, response.data.cargo);
-			this.accountService.updateAgent(response.data.agent);
-		}, (error) => {});
-    	return observable;
 	}
 	
 	jettisonCargo(shipSymbol: string, itemSymbol: string, itemQty: number): Observable<{ data: {cargo: ShipCargo }}> {

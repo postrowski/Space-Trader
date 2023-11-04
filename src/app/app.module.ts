@@ -33,6 +33,7 @@ import { VerticalProgressBarComponent } from './components/vertical-progress-bar
 import { WaypointBaseComponent } from './components/waypoint-base/waypoint-base.component';
 import { AutomationComponent } from './components/automation/automation.component';
 import { DiagnosticsComponent } from './components/diagnostics/diagnostics.component';
+import { ShiplistComponent } from './components/shiplist/shiplist.component';
 @NgModule({
 	declarations: [
 		AppComponent,
@@ -61,6 +62,7 @@ import { DiagnosticsComponent } from './components/diagnostics/diagnostics.compo
 		WaypointBaseComponent,
   AutomationComponent,
   DiagnosticsComponent,
+  ShiplistComponent,
 	],
 	imports: [
 		BrowserAnimationsModule,

@@ -22,54 +22,7 @@
 		</table>
 		<br />
 	</div>
-	<div>
-		Ships At Waypoint:
-		<div cdkDropListGroup>
-			<table *ngFor="let ship of shipsAtWaypoint"
-				[ngClass]="{ 'selected-ship': ship == selectedShip }"
-				(click)="onSelectShip(ship)">
-				<tr>
-					<td colspan="2">
-						<span class="shipname">{{ship.symbol}}</span><br>
-						<span class="shipframe">{{ship.frame.name.toLowerCase()}}</span>
-					</td>
-					<td>
-						<div *ngIf="ship.nav.status === 'IN_TRANSIT'">
-							<app-countdown title="arriving in"
-								[startTimeStr]="ship.nav.route.departureTime"
-								[endTimeStr]="ship.nav.route.arrival"></app-countdown>
-						</div>
-						<div *ngIf="(ship.nav.status !== 'IN_TRANSIT')">
-							<app-countdown [title]="'Cooldown'" [cooldown]="ship.cooldown"></app-countdown>
-						</div>
-					</td>
-					<td>
-						<button *ngIf="ship.nav.status !== 'IN_ORBIT'"
-							(click)="onOrbitShip(ship)">Orbit</button>
-					</td>
-				</tr>
-				<tr>
-					<td>
-						<div cdkDropList class="draggable-list"
-							(cdkDropListDropped)="onDrop($event)">
-							<div cdkDrag [cdkDragData]="cargoItem" class="cargoItem"
-								*ngFor="let cargoItem of ship!.cargo.inventory">{{
-								cargoItem.name }} x{{cargoItem.units}}</div>
-							<div class='emptyCargoSpot'>Empty spaces
-								x{{ship.cargo.capacity - ship.cargo.units}}</div>
-						</div>
-					</td>
-					<td colspan="2">
-						<button *ngIf="canSurvey(ship)" (click)="onCreateSurvey(ship)">Survey</button> <br *ngIf="canSurvey(ship)" />
-						<button (click)="onMine(ship)">Mine</button>
-					</td>
-				</tr>
-			</table>
-			<div class="droppable-area emptyCargoSpot" cdkDropList
-				(cdkDropListDropped)="onDropJettison($event)">
-				<img src="assets/Trash.png">Jettison
-			</div>
-		</div>
-	</div>
+	<app-shiplist showMine="true" showSurvey="true" (onMineClicked)="onMine($event)"></app-shiplist>
+	
 </div>
 

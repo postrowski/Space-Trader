@@ -9,8 +9,6 @@ import { AccountService } from './account.service';
 import { DBService } from './db.service';
 import { liveQuery } from 'dexie';
 import { Agent } from 'src/models/Agent';
-import { ConstructionSite } from 'src/models/ConstructionSite';
-import { ShipCargo } from 'src/models/ShipCargo';
 
 @Injectable({
   providedIn: 'root'
@@ -293,20 +291,5 @@ export class GalaxyService {
 		const headers = this.accountService.getHeader();
 		return this.http.get<Waypoint>
 		                    (`${this.apiUrlSystems}/${systemSymbol}/waypoints/${waypointSymbol}`, {headers})
-	}
-	getConstructionSite(waypointSymbol:string) : Observable<{data: ConstructionSite}> {
-		const systemSymbol = GalaxyService.getSystemSymbolFromWaypointSymbol(waypointSymbol);
-		const headers = this.accountService.getHeader();
-		return this.http.get<{data: ConstructionSite}>
-		                    (`${this.apiUrlSystems}/${systemSymbol}/waypoints/${waypointSymbol}/construction`, {headers})
-	}
-	supplyConstructionSite(waypointSymbol:string, shipSymbol: string, tradeSymbol: string, units: number) : Observable<{data: {construction: ConstructionSite, cargo: ShipCargo}}> {
-		const systemSymbol = GalaxyService.getSystemSymbolFromWaypointSymbol(waypointSymbol);
-		const body = {shipSymbol, tradeSymbol, units};
-		const headers = this.accountService.getHeader();
-		const observable = this.http.post<{data: {construction: ConstructionSite, cargo: ShipCargo}}>
-		                    (`${this.apiUrlSystems}/${systemSymbol}/waypoints/${waypointSymbol}/construction.supply`,
-		                     body, {headers});
-		return observable;
 	}
 }

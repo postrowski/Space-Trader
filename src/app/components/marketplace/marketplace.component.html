@@ -1,7 +1,6 @@
 <h1>Marketplace {{waypoint?.symbol}}</h1>
 <div class="text-container">
 	<div *ngIf="waypoint != null">
-
 		<div>
 			<h2>Trade Goods</h2>
 			<table>
@@ -26,11 +25,41 @@
 			</table>
 			<div *ngIf="selectedTradeItem">
 				Qty:<input type="number" [(ngModel)]="buyTradeQty">
-				<button (click)="onBuyTrade()">buy</button>
+				<button (click)="onBuyTradeItem()">buy</button>
 			</div>
 		</div>
-		
+		<div>
+			<table>
+				<tr>
+					<td colspan="2">
+						<h3>All markets with </h3>
+					</td>
+					<td colspan="4">
+						<select [(ngModel)]="selectedItemSymbol" (ngModelChange)="updateOtherMarkets()">
+							<option *ngFor="let tradeItem of tradeItems">{{tradeItem}}</option>
+						</select>
+					</td>
+				</tr>
+				<tr>
+					<th>Market Symbol</th>
+					<th>Distance</th>
+					<th>Purchase Price</th>
+					<th>Sell Price</th>
+					<th>Trade Volume</th>
+					<th>Supply</th>
+				</tr>
+				<tr *ngFor="let item of itemAtOtherMarkets">
+					<td>{{item.marketSymbol}}</td>
+					<td>{{getDistanceToMarket(item.marketSymbol)}}</td>
+					<td>{{item.purchasePrice}}</td>
+					<td>{{item.sellPrice}}</td>
+					<td>{{item.tradeVolume}}</td>
+					<td>{{item.supply}}</td>
+				</tr>
+			</table>
+		</div>
 	</div>
+	
 	<div>
 		Credits: {{account?.credits | currency : 'USD' : 'symbol' : '1.0-0'}}<br/>
 		Ships At Waypoint:

@@ -46,7 +46,7 @@ export class ContractComponent {
 					const unitsLeft = deliverable.unitsRequired - deliverable.unitsFulfilled;
 					if (unitsLeft > 0) {
 						const units = Math.min(cargo.units, unitsLeft);
-						this.contractService.deliverCargo(this.contract.id, deliverable.tradeSymbol, units)
+						this.contractService.deliverCargo(this.contract.id, ship.symbol, deliverable.tradeSymbol, units)
 						                    .subscribe((response) => {
 							this.contract?.update(response.data.contract);
 						});

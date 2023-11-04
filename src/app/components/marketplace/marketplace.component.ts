@@ -5,6 +5,7 @@ import { GalaxyService } from 'src/app/services/galaxy.service';
 import { MarketItemType, MarketService, UiMarketItem } from 'src/app/services/market.service';
 import { ModalService } from 'src/app/services/modal.service';
 import { Agent } from 'src/models/Agent';
+import { LocXY } from 'src/models/LocXY';
 import { Market, MarketItem } from 'src/models/Market';
 import { Ship } from 'src/models/Ship';
 import { ShipCargoItem } from 'src/models/ShipCargoItem';
@@ -20,13 +21,14 @@ export class MarketplaceComponent implements OnInit{
 	account: Agent | null = null;
 
 	marketItems: UiMarketItem[] = [];
+	itemAtOtherMarkets: UiMarketItem[] =[];
 	goods: TypedMarketItem[] = [];
 	shipsAtWaypoint: Ship[] = [];
 	selectedShip: Ship | null = null;
-	selectedExportItem: MarketItem | null = null;
-	selectedImportItem: MarketItem | null = null;
 	selectedTradeItem: TypedMarketItem | null = null;
 	selectedCargoItem: ShipCargoItem | null = null;
+	selectedItemSymbol: string | null = null;
+	tradeItems: string[] = [];
 	sellImportQty: number = 0;
 	buyExportQty: number = 0;
 	buyTradeQty: number = 0;
@@ -97,6 +99,9 @@ export class MarketplaceComponent implements OnInit{
 				return;
 			});
 		}
+		const systemSymbol = GalaxyService.getSystemSymbolFromWaypointSymbol(this.waypoint?.symbol || '');
+		const tradeItemsSet = this.marketService.getAllItemsForTradeInSystem(systemSymbol);
+		this.tradeItems = [...tradeItemsSet].sort();
 	}
 	compare(s1: string, s2:string) {
 		if (s1 < s2) return -1;
@@ -120,17 +125,33 @@ export class MarketplaceComponent implements OnInit{
 			}
 		})
 	}
-	selectImportItem(item: MarketItem) {
-		this.selectedImportItem = item;
-	}
-	selectExportItem(item: MarketItem) {
-		this.selectedExportItem = item;
-	}
 	selectTradeItem(item: TypedMarketItem) {
 		this.selectedTradeItem = item;
+		this.selectedItemSymbol = item.symbol;
+		this.updateOtherMarkets();
 	}
+	updateOtherMarkets() {
+		this.itemAtOtherMarkets = [];
+		if (this.selectedItemSymbol && this.waypoint) {
+			const systemSymbol = GalaxyService.getSystemSymbolFromWaypointSymbol(this.waypoint.symbol);
+			const itemsByWaypoint = this.marketService.getPricesForItemInSystemByWaypointSymbol(systemSymbol, this.selectedItemSymbol);
+			for (const item of itemsByWaypoint.values()) {
+				this.itemAtOtherMarkets.push(item);
+			}
+		}
+	}
+	getDistanceToMarket(marketSymbol: string): number | null {
+		const otherMarket = this.galaxyService.getWaypointByWaypointSymbol(marketSymbol);
+		if (otherMarket && this.waypoint) {
+			return LocXY.getDistance(otherMarket, this.waypoint);
+		}
+		return null;
+	}
+	
 	selectCargoItem(item: ShipCargoItem) {
 		this.selectedCargoItem = item;
+		this.selectedItemSymbol = item.symbol;
+		this.updateOtherMarkets();
 	}
 	onSelectShip(ship: Ship) {
 		this.selectedShip = ship;
@@ -142,26 +163,9 @@ export class MarketplaceComponent implements OnInit{
 		}
 	}
 
-	onBuyExport() {
-		if (this.selectedShip && this.selectedExportItem && this.buyExportQty > 0) {
-			this.fleetService.purchaseCargo(this.selectedShip.symbol, 
-			                                this.selectedExportItem.symbol,
-			                                this.buyExportQty).subscribe((response) => {
-			});
-		}
-	}
-	onSellImport() {
-		if (this.selectedShip && this.selectedImportItem && this.sellImportQty > 0) {
-			this.fleetService.sellCargo(this.selectedShip.symbol, 
-			                            this.selectedImportItem.symbol,
-			                            this.sellImportQty).subscribe((response) => {
-			});
-		}
-		
-	}
-	onBuyTrade() {
+	onBuyTradeItem() {
 		if (this.selectedShip && this.selectedTradeItem && this.buyTradeQty > 0) {
-			this.fleetService.purchaseCargo(this.selectedShip.symbol, 
+			this.marketService.purchaseCargo(this.selectedShip.symbol, 
 			                                this.selectedTradeItem.symbol,
 			                                this.buyTradeQty).subscribe((response) => {
 			});
@@ -169,7 +173,7 @@ export class MarketplaceComponent implements OnInit{
 	}
 	onSellCargoItem() {
 		if (this.selectedShip && this.selectedCargoItem && this.sellTradeQty > 0) {
-			this.fleetService.sellCargo(this.selectedShip.symbol, 
+			this.marketService.sellCargo(this.selectedShip.symbol, 
 			                            this.selectedCargoItem.symbol,
 			                            this.sellTradeQty).subscribe((response) => {
 			});
@@ -177,7 +181,7 @@ export class MarketplaceComponent implements OnInit{
 	}
 	onSellAll(cargoItem: ShipCargoItem) {
 		if (this.selectedShip && cargoItem && cargoItem.units > 0) {
-			this.fleetService.sellCargo(this.selectedShip.symbol, 
+			this.marketService.sellCargo(this.selectedShip.symbol, 
 			                            cargoItem.symbol,
 			                            cargoItem.units).subscribe((response) => {
 				if (this.selectedCargoItem?.symbol == cargoItem.symbol) {

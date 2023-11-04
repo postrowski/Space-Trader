@@ -36,7 +36,6 @@ export class ShipyardComponent implements OnInit{
 		accountService.agent$.subscribe((response) => {
 			this.account = response;
 		})
-
 	}
 	
 	ngOnInit(): void {

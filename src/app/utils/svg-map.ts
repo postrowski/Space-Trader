@@ -106,8 +106,8 @@ export abstract class SvgMap implements AfterViewInit {
 	centerOnLocation(x: number, y: number) {
 		this.animationStartLoc = new LocXY(this.xOffset, this.yOffset);
 		this.animationStopLoc = new LocXY(this.width/2 - x * this.scale, this.height/2 - y* this.scale);
-		const dx = Math.abs(this.animationStartLoc.x - this.animationStopLoc.x);
-		const dy = Math.abs(this.animationStartLoc.x - this.animationStopLoc.x);
+		const dx = Math.abs(this.animationStartLoc.x - this.animationStopLoc.x) * 1.1;
+		const dy = Math.abs(this.animationStartLoc.y - this.animationStopLoc.y) * 1.1;
 		if ((dx > this.width/2) || (dy > this.height/2)) {
 			this.animate();
 		}

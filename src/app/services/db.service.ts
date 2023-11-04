@@ -29,7 +29,7 @@ export class DBService {
 	}
 
 	public async initDatabase(): Promise<void> {
-		this.db = new Dexie('Spacetrader-DB');
+		this.db = new Dexie('SpaceTraderDB');
 		this.db.version(1).stores({
 			systems: 'symbol, x, y',
 			waypoints: 'symbol,systemSymbol',
@@ -92,7 +92,7 @@ export class DBService {
 		// Open the database (this is needed to delete it)
 		this.db.open().then(() => {
 			// Delete the entire database
-			return this.db.delete();
+			this.db.delete();
 		}).then(() => {
 			console.log(`Database has been deleted.`);
 		}).catch(error => {

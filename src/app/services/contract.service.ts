@@ -69,10 +69,12 @@ export class ContractService implements OnInit {
 	}
 	getContractForAcceptance(contract: Contract) {
 		if (contract.accepted && !contract.fulfilled) {
+			console.log("getContractForAcceptance: " + contract.id);
 			this.acceptedContractSubject.next(contract);
 		} else {
 			const acceptedContract = this.acceptedContractSubject.getValue();
 			if (acceptedContract && acceptedContract.fulfilled) {
+				console.log("getContractForAcceptance: 'null'");
 				this.acceptedContractSubject.next(null);
 			}
 		}
@@ -80,13 +82,16 @@ export class ContractService implements OnInit {
 	private addContract(newContract: Contract) {
 		for (let contract of this.allContractsSubject.value) {
 			if (contract.id == newContract.id) {
+				console.log(`addContract - update existing - id: ${newContract.id}, ac: ${newContract.accepted}, ff:${newContract.fulfilled}`);
 				contract.update(newContract);
 				this.getContractForAcceptance(contract);
 				return;
 			}
 		}
+		console.log(`addContract - new - id: ${newContract.id}, ac: ${newContract.accepted}, ff:${newContract.fulfilled}`);
 		const contract = new Contract();
 		contract.update(newContract);
+		console.log(`addContract - new actual - id: ${contract.id}, ac: ${contract.accepted}, ff:${contract.fulfilled}`);
 		this.getContractForAcceptance(contract);
 		this.allContractsSubject.value.push(contract);
 		
@@ -111,14 +116,15 @@ export class ContractService implements OnInit {
 		}, (error) => {});
 	    return observable;
 	}
-	negotiateContract(shipSymbol: string): Observable<{ data: Contract}>{
+	negotiateContract(shipSymbol: string): Observable<{ data: {contract: Contract}}>{
 		const headers = this.accountService.getHeader();
-		const observable = this.http.post<{ data: Contract}>
+		const observable = this.http.post<{ data: {contract: Contract}}>
 			(`${this.apiUrlMyShips}/${shipSymbol}/negotiate/contract`,
 				{}, { headers })
       		.pipe(shareReplay(1)); // Use the shareReplay operator so our service can subscribe, and so can the caller
 		observable.subscribe((response)=> {
-			this.addContract(response.data);
+			console.log(`negotiateContract success`);
+			this.addContract(response.data.contract);
 		}, (error) => {});
 		return observable;
 	}
@@ -137,21 +143,22 @@ export class ContractService implements OnInit {
 		                     (`${this.apiUrlMyContracts}/${contractId}/accept`, {}, { headers })
       		.pipe(shareReplay(1)); // Use the shareReplay operator so our service can subscribe, and so can the caller
 		observable.subscribe((response)=> {
+			console.log(`acceptContract success`);
 			this.addContract(response.data.contract);
 			this.accountService.updateAgent(response.data.agent);
 		}, (error) => {});
 		return observable;                     
 	}
 	
-	deliverCargo(contractId: string, tradeSymbol: string, units: number) :
+	deliverCargo(contractId: string, shipSymbol: string, tradeSymbol: string, units: number) :
 	                           Observable<{ data: {contract: Contract, cargo: ShipCargo}}> {
-		const shipSymbol = this.fleetService.getActiveShip()?.symbol || "";
 		const body = {shipSymbol, tradeSymbol, units};
 		const headers = this.accountService.getHeader();
 		const observable = this.http.post<{ data: {contract: Contract, cargo: ShipCargo}}>
 		                     (`${this.apiUrlMyContracts}/${contractId}/deliver`, body, { headers })
       		.pipe(shareReplay(1)); // Use the shareReplay operator so our service can subscribe, and so can the caller
 		observable.subscribe((response)=> {
+			console.log(`deliverCargo success`);
 			this.addContract(response.data.contract);
 			this.fleetService.updateShipCargo(shipSymbol, response.data.cargo);
 		}, (error) => {});
@@ -163,6 +170,7 @@ export class ContractService implements OnInit {
 		                     (`${this.apiUrlMyContracts}/${contractId}/fulfill`, {}, { headers })
       		.pipe(shareReplay(1)); // Use the shareReplay operator so our service can subscribe, and so can the caller
 		observable.subscribe((response)=> {
+			console.log(`sulfillContract success`);
 			this.addContract(response.data.contract)
 			this.accountService.updateAgent(response.data.agent);
 		}, (error) => {});

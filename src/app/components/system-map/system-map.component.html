@@ -18,8 +18,8 @@
 					[attr.x1]="xOffset" [attr.y1]="yOffset - 9*100*scale"
 					[attr.x2]="xOffset" [attr.y2]="yOffset + 9*100*scale"/>
   <line *ngFor="let x of [-8, -7, -6, -5, -4, -3, -2, -1, 1, 2, 3, 4, 5, 6, 7, 8]"
-					[attr.x1]="xOffset + (x * 100 * scale)" [attr.y1]="yOffset - (height+100)*scale"
-					[attr.x2]="xOffset + (x * 100 * scale)" [attr.y2]="yOffset + (height+100)*scale"
+					[attr.x1]="xOffset + (x * 100 * scale)" [attr.y1]="yOffset - 9*100*scale"
+					[attr.x2]="xOffset + (x * 100 * scale)" [attr.y2]="yOffset + 9*100*scale"
 					stroke="#444" stroke-width="1" />
          
   <line stroke="#444" stroke-width="2"  

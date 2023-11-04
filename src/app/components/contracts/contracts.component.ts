@@ -1,6 +1,7 @@
 import { Component } from '@angular/core';
 import { Contract } from 'src/models/Contract';
 import { ContractService } from '../../services/contract.service';
+import { FleetService } from 'src/app/services/fleet.service';
 
 @Component({
   selector: 'app-contracts',
@@ -11,7 +12,7 @@ export class ContractsComponent {
 	contracts: Contract[] = [];
 	selectedContract?: Contract | null;
 	
-	constructor(public contractService: ContractService) {
+	constructor(public contractService: ContractService, public fleetService: FleetService) {
 		this.contractService.selectedContract$.subscribe((contract) => {
 			this.selectedContract = contract;
 		});
@@ -27,4 +28,13 @@ export class ContractsComponent {
 	selectContract(contract: Contract) {
 		this.contractService.setSelectedContract(contract);
 	}
+	onNegotiateContract() {
+		const ship = this.fleetService.getShips()[0];
+		if (ship) {
+			this.contractService.negotiateContract(ship.symbol)
+							 .subscribe((response) => {
+			});
+		}
+	}
+
 }

@@ -25,7 +25,6 @@
 			<button *ngIf="hasShipyard()" (click)="modalService.open('modal-shipyard', waypoint)">Shipyard</button>
 			<button *ngIf="isJumpGate()" (click)="modalService.open('modal-jumpgate', waypoint)">Jumpgate</button>
 			<button *ngIf="isMineable()" (click)="modalService.open('modal-mine', waypoint)">Mine</button>
-			<button *ngIf="isFactionHQ()" [attr.enabled]="getShipAtWaypoint() != null" (click)="onNegotiateContract()">Negotiate Contract</button>
 			<button *ngIf="isUncharted()" [attr.enabled]="getShipAtWaypoint() != null" (click)="onCreateChart()">Create Chart</button>
 		</td>
 		<td *ngIf="waypoint.modifiers && waypoint.modifiers.length>0"><b>Modifiers:</b>

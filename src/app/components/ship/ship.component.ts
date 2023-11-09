@@ -116,7 +116,7 @@ export class ShipComponent implements OnInit {
 		}
 
 		return this._ship.cargo.inventory.map((item) => {
-			return `${item.units} ${item.name}`;
+			return `${item.units} ${item.symbol}`;
 		}).join('\n');
 	}
 	

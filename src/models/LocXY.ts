@@ -5,6 +5,7 @@ export class LocXY {
 	public constructor(x: number, y: number) {
 		this.x = x;
 		this.y = y;
+		LocXY.test();
 	}
 	
 	public update(src: LocXY) {
@@ -18,7 +19,23 @@ export class LocXY {
 		return x*x + y*y;
 	}	
 	public static getDistance(loc1: LocXY, loc2: LocXY) {
-		return Math.round(Math.sqrt(LocXY.getDistanceSquared(loc1, loc2)));
+		return Math.ceil(Math.sqrt(LocXY.getDistanceSquared(loc1, loc2)));
+	}
+
+	static testRun = false;
+	public static test() {
+		if (!LocXY.testRun) {
+			LocXY.testRun = true;
+			const places: LocXY[] = [
+				new LocXY(288, -190),
+				new LocXY(-168, -416),
+				new LocXY(15, 22),
+			];
+			//places to visit, starting from (15, 22)
+			const testResults = LocXY.findShortestPath(new LocXY(15, 22), new Set<LocXY>(places));
+			//results: (-15, 43)->(-4, 86)->
+			console.log(testResults);
+		}
 	}
 
 	public static findShortestPath(currentLoc: LocXY, remainingLocs: Set<LocXY>)

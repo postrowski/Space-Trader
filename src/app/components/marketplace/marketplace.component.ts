@@ -6,7 +6,6 @@ import { MarketItemType, MarketService, UiMarketItem } from 'src/app/services/ma
 import { ModalService } from 'src/app/services/modal.service';
 import { Agent } from 'src/models/Agent';
 import { LocXY } from 'src/models/LocXY';
-import { Market, MarketItem } from 'src/models/Market';
 import { Ship } from 'src/models/Ship';
 import { ShipCargoItem } from 'src/models/ShipCargoItem';
 import { WaypointBase, WaypointTrait } from 'src/models/WaypointBase';
@@ -21,7 +20,8 @@ export class MarketplaceComponent implements OnInit{
 	account: Agent | null = null;
 
 	marketItems: UiMarketItem[] = [];
-	itemAtOtherMarkets: UiMarketItem[] =[];
+	itemHistory: UiMarketItem[] = [];
+	itemAtOtherMarkets: UiMarketItemWithDist[] =[];
 	goods: TypedMarketItem[] = [];
 	shipsAtWaypoint: Ship[] = [];
 	selectedShip: Ship | null = null;
@@ -34,7 +34,13 @@ export class MarketplaceComponent implements OnInit{
 	buyTradeQty: number = 0;
 	sellTradeQty: number = 0;
 	showTransactions = false;
-	
+	sortKey: string = ''; // Initial sorting key
+	sortDirection: number = 1; // 1 for ascending, -1 for descending
+	maxPrice: number = 1;
+	xScale: ((value: number) => number) | null = null;
+	yScale: ((value: number) => number) | null = null;
+  
+
 	constructor(public galaxyService: GalaxyService,
 	            public fleetService: FleetService,
 	            public accountService: AccountService,
@@ -54,6 +60,25 @@ export class MarketplaceComponent implements OnInit{
 		this.loadMarket();
 	}
 	
+	formatDate(date: Date) {
+		return new Intl.DateTimeFormat('en-US', {
+			hour: '2-digit',
+			minute: '2-digit',
+			second: '2-digit',
+			day: 'numeric',
+			month: 'short'
+		}).format(date);
+	}
+	
+	sortBy(key: string) {
+		if (key === this.sortKey) {
+			this.sortDirection = -this.sortDirection; // Toggle sorting direction if sorting by the same key
+		} else {
+			this.sortKey = key;
+			this.sortDirection = 1; // Default to ascending order
+		}
+	}
+
 	hasTrait(traitSymbol: string) {
 		if (this.waypoint?.traits) {
 			for (let trait of this.waypoint.traits) {
@@ -69,34 +94,39 @@ export class MarketplaceComponent implements OnInit{
 		return this.hasTrait(WaypointTrait[WaypointTrait.MARKETPLACE]);
 	}
 
+	updateMarket(marketItems: UiMarketItem[]) {
+		this.marketItems = marketItems;
+		let goods: TypedMarketItem[] = [];
+		if (this.marketItems) {
+			for (const marketItem of this.marketItems) {
+				let item: TypedMarketItem = {
+					symbol: marketItem.symbol,
+					name: marketItem.symbol,
+					tradeVolume: marketItem.tradeVolume,
+					supply: marketItem.supply,
+					purchasePrice: marketItem.purchasePrice,
+					sellPrice: marketItem.sellPrice,
+					description: '',
+					type: MarketItemType[marketItem.type],
+					timestamp: marketItem.timestamp
+				}
+				goods.push(item);
+			}
+		}
+		this.goods = goods.sort((g1, g2) => {
+			return this.compare(g1.symbol, g2.symbol);
+		});
+	}
+	
 	loadMarket() {
 		this.marketItems = [];
 		this.selectedCargoItem = null;
 		this.goods = [];
+		this.itemHistory = [];
 		if (this.waypoint && this.hasMarketplace()) {
 			this.marketService.getMarketplace(this.waypoint.symbol, this.shipsAtWaypoint.length> 0)
 			                  .subscribe((response) => {
-				this.marketItems = response;
-				let goods: TypedMarketItem[] = [];
-				if (this.marketItems) {
-					for (const marketItem of this.marketItems) {
-						let item: TypedMarketItem = {
-							symbol: marketItem.symbol,
-							name: marketItem.symbol,
-							tradeVolume: marketItem.tradeVolume,
-							supply: marketItem.supply,
-							purchasePrice: marketItem.purchasePrice,
-							sellPrice: marketItem.sellPrice,
-							description: '',
-							type: MarketItemType[marketItem.type]
-						}
-						goods.push(item);
-					}
-				}
-				this.goods = goods.sort((g1, g2) => {
-					return this.compare(g1.symbol, g2.symbol);
-				});
-				return;
+								  this.updateMarket(response);
 			});
 		}
 		const systemSymbol = GalaxyService.getSystemSymbolFromWaypointSymbol(this.waypoint?.symbol || '');
@@ -129,14 +159,72 @@ export class MarketplaceComponent implements OnInit{
 		this.selectedTradeItem = item;
 		this.selectedItemSymbol = item.symbol;
 		this.updateOtherMarkets();
+		if (this.waypoint) {
+			this.itemHistory = this.marketService.getItemHistoryAtMarket(this.waypoint.symbol, item.symbol)
+												 .filter((item) => item.purchasePrice > 0);
+			this.itemHistory.sort((h1, h2)=> { 
+				if (h1.timestamp < h2.timestamp) return -1;
+				if (h1.timestamp > h2.timestamp) return 1;
+				return 0;
+			});
+			const oldest = Math.min(...this.itemHistory.map((item) => item.timestamp.getTime()));
+			const newest = Math.max(...this.itemHistory.map((item) => item.timestamp.getTime()));
+			const highestPurchasePrice = Math.max(...this.itemHistory.map((item) => item.purchasePrice));
+			const highestSellPrice = Math.max(...this.itemHistory.map((item) => item.sellPrice));
+
+			this.maxPrice = this.getNextBiggestNumber(Math.max(highestPurchasePrice, highestSellPrice));
+			this.xScale = this.createScale(oldest, newest, 0, 400);
+			this.yScale = this.createScale(this.maxPrice, 0, 0, 200);
+		}
 	}
+	private getNextBiggestNumber(num: number) : number {
+	   	const orderOfMagnitude = Math.floor(Math.log10(num));
+		const nextTen =  10 ** (orderOfMagnitude + 1);
+		if (num*2 > nextTen)
+			return nextTen;
+		return nextTen / 2;
+	}
+	formatPrice(num: number): string {
+		return '$' + num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+	}
+	
+	private createScale(domainStart: number, domainEnd: number, rangeStart: number, rangeEnd: number): (value: number) => number {
+		const domainRange = domainEnd - domainStart;
+		const rangeRange = rangeEnd - rangeStart;
+		return (value: number) => ((value - domainStart) / domainRange) * rangeRange + rangeStart;
+	}
+	
+	getXCoordinate(timestamp: Date): number {
+		if (this.xScale)
+			return this.xScale(timestamp.getTime());
+		return 0;
+	}
+
+	getYCoordinate(price: number): number {
+		if (this.yScale)
+			return this.yScale(price);
+		return 0;
+	}
+
 	updateOtherMarkets() {
 		this.itemAtOtherMarkets = [];
 		if (this.selectedItemSymbol && this.waypoint) {
 			const systemSymbol = GalaxyService.getSystemSymbolFromWaypointSymbol(this.waypoint.symbol);
 			const itemsByWaypoint = this.marketService.getPricesForItemInSystemByWaypointSymbol(systemSymbol, this.selectedItemSymbol);
 			for (const item of itemsByWaypoint.values()) {
-				this.itemAtOtherMarkets.push(item);
+				const uiItem: UiMarketItemWithDist = {
+					marketSymbol: item.marketSymbol,
+					type: item.type,
+					timestamp: item.timestamp,
+					symbol: item.symbol,
+					purchasePrice: item.purchasePrice,
+					sellPrice: item.sellPrice,
+					supply: item.supply,
+					tradeVolume: item.tradeVolume,
+					distance: this.getDistanceToMarket(item.marketSymbol) || 0,
+					toMarket: this.waypoint.symbol
+				};
+				this.itemAtOtherMarkets.push(uiItem);
 			}
 		}
 	}
@@ -197,6 +285,14 @@ export class MarketplaceComponent implements OnInit{
 			});
 		}
 	}
+	onForceRefresh() {
+		if (this.waypoint) {
+			this.marketService.getMarketplaceForced(this.waypoint.symbol)
+			                  .subscribe((response) => {
+								  this.updateMarket(response);
+			});
+		}
+	}
 }
 export class TypedMarketItem {
 	symbol!: string;
@@ -206,5 +302,11 @@ export class TypedMarketItem {
 	purchasePrice!: number;
 	sellPrice!: number;
 	description!: string;
-	type!: string
+	type!: string;
+	timestamp!: Date;
+}
+
+export class UiMarketItemWithDist extends UiMarketItem {
+	distance: number | undefined;
+	toMarket: string | undefined;
 }

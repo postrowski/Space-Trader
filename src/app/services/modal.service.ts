@@ -29,7 +29,7 @@ export class ModalService {
         this.modals = this.modals.filter(x => x === modal);
     }
 
-    open(id: string, waypoint: WaypointBase) {
+    open(id: string, waypoint: WaypointBase | null) {
 		this.waypointSubject.next(waypoint);
         // open modal specified by id
         const modal = this.modals.find(x => x.id === id);

@@ -22,6 +22,7 @@ export class MarketTradeGood {
 	purchasePrice!: number;
 	sellPrice!: number;
 }
+
 export enum Supply {
 	SCARCE,
 	LIMITED,

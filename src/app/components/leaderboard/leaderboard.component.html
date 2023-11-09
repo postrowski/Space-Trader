@@ -1,0 +1,33 @@
+<h3>Leaderboard</h3>
+<button (click)="onLoad()">refresh</button>
+<table>
+	<tr>
+		<th (click)="sortBy('symbol')">Symbol
+			<span *ngIf="sortKey === 'symbol' && sortDirection === 1">▲</span>
+			<span *ngIf="sortKey === 'symbol' && sortDirection === -1">▼</span>
+		</th>
+		<th (click)="sortBy('headquarters')">Headquarters
+			<span *ngIf="sortKey === 'headquarters' && sortDirection === 1">▲</span>
+			<span *ngIf="sortKey === 'headquarters' && sortDirection === -1">▼</span>
+		</th>
+		<th (click)="sortBy('credits')">Credits
+			<span *ngIf="sortKey === 'credits' && sortDirection === 1">▲</span>
+			<span *ngIf="sortKey === 'credits' && sortDirection === -1">▼</span>
+		</th>
+		<th (click)="sortBy('startingFaction')">Starting Faction
+			<span *ngIf="sortKey === 'startingFaction' && sortDirection === 1">▲</span>
+			<span *ngIf="sortKey === 'startingFaction' && sortDirection === -1">▼</span>
+		</th>
+		<th (click)="sortBy('shipCount')">Ship Count
+			<span *ngIf="sortKey === 'shipCount' && sortDirection === 1">▲</span>
+			<span *ngIf="sortKey === 'shipCount' && sortDirection === -1">▼</span>
+		</th>
+	</tr>
+	<tr *ngFor="let agent of agents | sort:sortKey:sortDirection">
+		<td>{{agent.symbol}}</td>
+		<td>{{agent.headquarters}}</td>
+		<td>{{agent.credits}}</td>
+		<td>{{agent.startingFaction}}</td>
+		<td>{{agent.shipCount}}</td>
+	</tr>
+</table>

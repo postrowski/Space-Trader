@@ -8,8 +8,18 @@
 	</tr>
 	<tr>
 		<td style="vertical-align: top">
-			<span *ngFor="let contract of contracts" [ngClass]="{ 'selected-row': contract === selectedContract}"
-					(click)="selectContract(contract)">{{contract?.id }}
+			Current Contract:
+			<span *ngIf="activeContract" [ngClass]="{ 'selected-row': activeContract === selectedContract}"
+					(click)="selectContract(activeContract)">{{activeContract.id }}
+			</span>
+			<br/>
+			<input id="showHist" type="checkbox" [(ngModel)]="showHistory">
+			<label for="showHist">Show History</label>
+			<br/>
+			<span *ngIf="showHistory">
+				<span *ngFor="let contract of contracts" [ngClass]="{ 'selected-row': contract === selectedContract}"
+						(click)="selectContract(contract)">{{contract?.id }}
+				</span>
 			</span>
 		</td>
 		<td [attr.rowspan]="contracts.length" class="selected-row">

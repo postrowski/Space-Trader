@@ -10,9 +10,15 @@
 			<app-automation></app-automation>
 			<app-fleet></app-fleet>
 			<app-diagnostics></app-diagnostics>
+			<button (click)="modalService.open('modal-leaderboard', null)">Leaderboard</button>
 		</td>
 	</tr>
 </table>
+<app-modal id="modal-leaderboard" >
+    <app-leaderboard></app-leaderboard>
+    <button (click)="modalService.close();">Leave</button>
+</app-modal>
+
 <app-modal id="modal-marketplace" >
     <app-marketplace></app-marketplace>
     <button (click)="modalService.close();">Leave</button>

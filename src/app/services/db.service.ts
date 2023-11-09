@@ -18,7 +18,7 @@ export class DBService {
 	waypoints!: Dexie.Table<Waypoint, string>;
 	agent!: Dexie.Table<Agent, string>;
 	jumplinks!: Dexie.Table<JumpLink, string>;
-	marketItems!: Dexie.Table<UiMarketItem, number>;
+	marketItems!: Dexie.Table<DBMarketItem, number>;
 	shipyards!: Dexie.Table<Shipyard, string>;
 	jumpgates!: Dexie.Table<JumpGate, string>;
 	agents!: Dexie.Table<AgentInfo, number>;
@@ -30,7 +30,7 @@ export class DBService {
 
 	public async initDatabase(): Promise<void> {
 		this.db = new Dexie('SpaceTraderDB');
-		this.db.version(1).stores({
+		this.db.version(2).stores({
 			systems: 'symbol, x, y',
 			waypoints: 'symbol,systemSymbol',
 			agent: 'symbol',
@@ -156,12 +156,35 @@ export class DBService {
 	getAllWaypoints(): Promise<Waypoint[]> {
 		return this.waypoints.toArray();
 	}
-	
+
 	addMarketItems(marketItems: UiMarketItem[]) {
 		for (const marketItem of marketItems) {
-			this.marketItems.add(marketItem)
+			// Define a unique key for the market item (excluding the timestamp)
+			const key = {
+				symbol: marketItem.symbol,
+				tradeVolume: marketItem.tradeVolume,
+				supply: marketItem.supply,
+				purchasePrice: marketItem.purchasePrice,
+				sellPrice: marketItem.sellPrice,
+				marketSymbol: marketItem.marketSymbol,
+				type: marketItem.type,
+			};
+
+			// Check if an item with the same properties (excluding timestamp) exists
+			this.marketItems.get(key)
+				.then((existingItem) => {
+					if (existingItem) {
+						// An item with the same properties exists; update its timestamp
+						existingItem.timestamp = marketItem.timestamp;
+						return this.marketItems.update(existingItem.id, existingItem);
+					}
+					const dbItem = new DBMarketItem(marketItem.marketSymbol, marketItem.symbol, marketItem.type, marketItem);
+					dbItem.timestamp = marketItem.timestamp;
+					// No item with the same properties found; add a new item
+					return this.marketItems.add(dbItem);
+				})
 				.then(() => {
-					console.log(`updated market: ${marketItem}`);
+					console.log(`Added/Updated marketItem: ${marketItem.marketSymbol}: ${marketItem.supply}, ${marketItem.purchasePrice}, ${marketItem.sellPrice}, ${marketItem.timestamp.toLocaleTimeString()}`);
 				})
 				.catch((error) => {
 					console.error('Error updating market:', error);
@@ -225,4 +248,7 @@ export class AgentInfo {
 }
 export class DbInfo {
 	galaxyPagesLoaded = 0;
+}
+export class DBMarketItem extends UiMarketItem {
+	id: number = 0;
 }

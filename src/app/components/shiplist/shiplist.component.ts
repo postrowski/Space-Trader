@@ -7,6 +7,9 @@ import { ShipCargoItem } from 'src/models/ShipCargoItem';
 import { WaypointBase } from 'src/models/WaypointBase';
 import { ModalService } from 'src/app/services/modal.service';
 import { SurveyService } from 'src/app/services/survey.service';
+import { AccountService } from 'src/app/services/account.service';
+import { Agent } from 'src/models/Agent';
+import { MarketService } from 'src/app/services/market.service';
 
 @Component({
   selector: 'app-shiplist',
@@ -22,11 +25,14 @@ export class ShiplistComponent implements OnInit {
 	showMine = true;
 	showSurvey = true;
 	showSellAll = true;
+	account: Agent | null = null;
 
 	@Output() onMineClicked: EventEmitter<Ship> = new EventEmitter<Ship>();
 
 	constructor(public galaxyService: GalaxyService,
 				public fleetService: FleetService,
+	            public accountService: AccountService,
+	            public marketService: MarketService,
 				public surveyService: SurveyService,
 				public modalService: ModalService) {
 		this.modalService.waypoint$.subscribe((waypoint) => {
@@ -36,6 +42,9 @@ export class ShiplistComponent implements OnInit {
 		this.surveyService.allSurveys$.subscribe((surveys) => {
 			this.ngOnInit();
 		});
+		accountService.agent$.subscribe((response) => {
+			this.account = response;
+		})
 	}
 
 	ngOnInit(): void {
@@ -71,10 +80,24 @@ export class ShiplistComponent implements OnInit {
 		if (sourceShipSymbol && cargoItem) {
 			const userResponse = confirm(`You're about to jettison ${cargoItem.units} of ${cargoItem.symbol}. Are you certain?`);
 			if (userResponse) {
-				this.fleetService.jettisonCargo(sourceShipSymbol,
-					cargoItem.symbol, cargoItem.units).subscribe((response) => {
+				this.fleetService.jettisonCargo(sourceShipSymbol, cargoItem.symbol, cargoItem.units)
+				                 .subscribe((response) => {
 					});
 			}
+		}
+	}
+	
+	onDropSell(event: CdkDragDrop<string[]>) {
+		let cargoItem = event.item.data;
+		let sourceShipSymbol = this.getDragShipSymbol(event, true);
+		if (sourceShipSymbol && cargoItem) {
+			// TODO: how to limit the number of items being sold?
+			// for example, if the item has a trade limit on it.
+			this.marketService.sellCargo(sourceShipSymbol, cargoItem.symbol, cargoItem.units)
+			                  .subscribe((response) => {
+				}, (error) => {
+					
+				});
 		}
 	}
 	

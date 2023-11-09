@@ -63,8 +63,8 @@ export class MarketService {
 		return marketItems;
 	}
 	
-	private addToMarketItems(marketItems: UiMarketItem[]) {
-		for (let marketItem of marketItems) {
+	private addToMarketItems(marketItemsArray: UiMarketItem[]) {
+		for (let marketItem of marketItemsArray) {
 			const marketSymbol = marketItem.marketSymbol;
 			const systemSymbol = GalaxyService.getSystemSymbolFromWaypointSymbol(marketSymbol);
 			let marketsInSystem = this.marketSymbolsBySystemSymbol.get(systemSymbol);
@@ -89,6 +89,22 @@ export class MarketService {
 			while (marketItems.length > 0 && marketItems[0].purchasePrice == 0) {
 				marketItems.shift();
 			}
+			if (marketItems.length > 0) {
+				const previousMarketItem = marketItems[marketItems.length-1];
+				if (previousMarketItem.marketSymbol == marketItem.marketSymbol &&
+				    previousMarketItem.purchasePrice == marketItem.purchasePrice &&
+				    previousMarketItem.sellPrice == marketItem.sellPrice&&
+				    previousMarketItem.supply == marketItem.supply&&
+				    previousMarketItem.symbol == marketItem.symbol&&
+				    previousMarketItem.type == marketItem.type) {
+					// This new item is identical (except possibly the timestamp) as the previous record.
+					// rather than increasing the record count, just update the timestamp
+					console.log(`Duplicate MarketItem found ${marketItem.marketSymbol} ${marketItem.symbol}, updating timestamp only`);
+					previousMarketItem.timestamp = marketItem.timestamp;
+					continue;
+				}
+			}
+			console.log(`new MarketItem found ${marketItem.marketSymbol} ${marketItem.symbol}, buy ${marketItem.purchasePrice}, sell ${marketItem.sellPrice}`);
 			marketItems.push(marketItem);
 		}
 	}
@@ -196,7 +212,52 @@ export class MarketService {
 			return items[items.length-1];
 		}
 		return null;
-	}	
+	}
+	getItemHistoryAtMarket(marketSymbol: string, itemSymbol: string): UiMarketItem[]{
+		const marketItemsByTradeSymbol: Map<string, UiMarketItem[]> | undefined
+		                  = this.marketItemsByTradeSymbolByWaypointSymbol.get(marketSymbol);
+		return marketItemsByTradeSymbol?.get(itemSymbol) || [];
+	}
+	getItemHistoricalLowPriceAtMarket(marketSymbol: string, itemSymbol: string): number{
+		let bestPrice = Infinity;
+		const marketItemsByTradeSymbol: Map<string, UiMarketItem[]> | undefined
+	                  = this.marketItemsByTradeSymbolByWaypointSymbol.get(marketSymbol);
+		const allItems = marketItemsByTradeSymbol?.get(itemSymbol) || [];
+		for (let item of allItems) {
+			const price = item.purchasePrice;
+			if (price < bestPrice) {
+				bestPrice = price;
+			}
+		}
+		return bestPrice;
+	}
+	getItemHistoricalAveragePriceAtMarket(marketSymbol: string, itemSymbol: string, purchase: boolean): number{
+		let total = 0;
+		let count = 0;
+		const systemSymbol = GalaxyService.getSystemSymbolFromWaypointSymbol(marketSymbol);
+		for (let marketSymbol of this.marketSymbolsBySystemSymbol.get(systemSymbol) || []) {
+			const marketItemsByTradeSymbol: Map<string, UiMarketItem[]> | undefined
+		                  = this.marketItemsByTradeSymbolByWaypointSymbol.get(marketSymbol);
+			const allItems = marketItemsByTradeSymbol?.get(itemSymbol) || [];
+			for (let item of allItems) {
+				total += purchase ? item.purchasePrice : item.sellPrice;
+				count++
+			}
+		}
+		return total/count;
+	}
+	getAverageFuelCost(systemSymbol: string) {
+		systemSymbol = GalaxyService.getSystemSymbolFromWaypointSymbol(systemSymbol);
+		const fuelPricesByWaypointSymbol = this.getPricesForItemInSystemByWaypointSymbol(systemSymbol, 'FUEL');
+		let cost = 0;
+		for (let fuelItem of fuelPricesByWaypointSymbol.values() || []) {
+			cost += fuelItem.purchasePrice;
+		}
+		if (cost == 0) {
+			return 250;
+		}
+		return Math.ceil(cost / fuelPricesByWaypointSymbol.size);
+	}
 	findCheapestMarketItemForSaleInSystem(fromWaypoint: WaypointBase, itemSymbol: string, unitsToBuy: number): UiMarketItem | null {
 		let bestMarketItem: UiMarketItem | null = null;
 		let bestCost = Infinity;
@@ -210,7 +271,7 @@ export class MarketService {
 			const market = this.galaxyService.getWaypointByWaypointSymbol(marketSymbol);
 			const marketFuelCostItem = fuelPricesByWaypointSymbol.get(marketSymbol);
 			const marketFuelCost = marketFuelCostItem?.purchasePrice || Infinity;
-			const fuelCost = Math.min(marketFuelCost, localFuelCost, 500);
+			const fuelCost = Math.min(marketFuelCost, localFuelCost, this.getAverageFuelCost(systemSymbol));
 			if (marketItem && market) {
 				const dist = LocXY.getDistance(fromWaypoint, market);
 				const cost = marketItem.purchasePrice * unitsToBuy + dist * fuelCost;
@@ -235,7 +296,7 @@ export class MarketService {
 			const market = this.galaxyService.getWaypointByWaypointSymbol(marketSymbol);
 			const marketFuelCostItem = fuelPricesByWaypointSymbol.get(marketSymbol);
 			const marketFuelCost = marketFuelCostItem?.purchasePrice || Infinity;
-			const fuelCost = Math.min(marketFuelCost, localFuelCost, 500);
+			const fuelCost = Math.min(marketFuelCost, localFuelCost, this.getAverageFuelCost(systemSymbol));
 			if (marketItem && market) {
 				const dist = LocXY.getDistance(fromWaypoint, market);
 				const profit = marketItem.sellPrice * unitsToSell - dist * fuelCost;
@@ -311,10 +372,11 @@ export class MarketService {
 	}
 	hasPriceData(marketSymbol: string): boolean {
 		const marketItemsByTradeSymbol = this.marketItemsByTradeSymbolByWaypointSymbol.get(marketSymbol);
+		// return false if dont have marketItemsByTradeSymbol, OR there are some entries whoes most recent price is 0
 		return !!marketItemsByTradeSymbol && 
-		      Array.from(marketItemsByTradeSymbol.values())
-		           .some((marketItems) => (marketItems.length > 0) &&
-		                                  (marketItems[marketItems.length - 1].purchasePrice !== 0));
+		      !Array.from(marketItemsByTradeSymbol.values())
+		            .some((marketItems) => (marketItems.length > 0) &&
+		                                   (marketItems[marketItems.length - 1].purchasePrice === 0));
 	}
 	
 	lastUpdateDate(marketSymbol: string): Date | null {
@@ -344,7 +406,8 @@ export class MarketService {
 		}
 		return items;
 	}
-	getBestTradeRoutesFrom(waypoint: WaypointBase, cargoCapacity: number, creditsAvailable: number, excludedTradeItems: Set<string> ): TradeRoute | null {
+	getBestTradeRoutesFrom(waypoint: WaypointBase, cargoCapacity: number, creditsAvailable: number,
+	                       excludedTradeItems: Set<string>, travelSpeed: string ): TradeRoute | null {
 		const marketItemsByTradeSymbol = this.marketItemsByTradeSymbolByWaypointSymbol.get(waypoint.symbol);
 		let bestProfit = 0;
 		let bestPurchaseItem = null;
@@ -358,7 +421,7 @@ export class MarketService {
 			if (purchaseItem) {
 				const units = Math.min(cargoCapacity, Math.floor(creditsAvailable / purchaseItem.purchasePrice));
 				if (units > 0) {
-					const bestRoute = this.findBestMarketToSell(waypoint, tradeSymbol, units);
+					const bestRoute = this.findBestMarketToSell(waypoint, tradeSymbol, units, travelSpeed);
 					if (bestRoute) {
 						const profit = bestRoute.proceeds - purchaseItem.purchasePrice * units;
 						if (profit > bestProfit) {
@@ -375,12 +438,15 @@ export class MarketService {
 		}
 		//console.log(`getBestTradeRoutesFrom(${waypoint.symbol}, ${cargoCapacity}, ${creditsAvailable}) => {buy: ${bestPurchaseItem}, sell: ${bestSellItem}, profit: ${bestProfit}}`)
 		return {
+			waypointSymbol: null,
 			buyItem: bestPurchaseItem,
 			sellItem: bestSellItem,
-			profit: bestProfit
+			profit: bestProfit,
+			travelSpeed: travelSpeed
 		};
 	}
-	findBestMarketToSell(waypoint: WaypointBase, itemSymbol: string, unitsToSell: number): {market: WaypointBase, sellItem: UiMarketItem, proceeds: number} | null {
+	findBestMarketToSell(waypoint: WaypointBase, itemSymbol: string, unitsToSell: number,
+	                     travelSpeed: string): {market: WaypointBase, sellItem: UiMarketItem, proceeds: number, travelSpeed: string} | null {
 		const fuelPrices: Map<string, UiMarketItem> = this.getPricesForItemInSystemByWaypointSymbol(waypoint.symbol, 'FUEL');
 		const itemPrices: Map<string, UiMarketItem> = this.getPricesForItemInSystemByWaypointSymbol(waypoint.symbol, itemSymbol);
 		const fuelCostLocal = fuelPrices.get(waypoint.symbol)?.purchasePrice || Infinity;
@@ -392,8 +458,11 @@ export class MarketService {
 			const market = this.galaxyService.getWaypointByWaypointSymbol(marketSymbol);
 			if (market && marketItem) {
 				const fuelCostAtMarket = fuelPrices.get(market.symbol)?.purchasePrice || Infinity;
-				const bestFuelCost = Math.min(fuelCostAtMarket, fuelCostLocal);
-				const distToMarket = LocXY.getDistance(market, waypoint);
+				let bestFuelCost = Math.min(fuelCostAtMarket, fuelCostLocal, this.getAverageFuelCost(marketSymbol));
+				if (travelSpeed == 'DRIFT') {
+					bestFuelCost = 1;
+				}
+				let distToMarket = Math.max(LocXY.getDistance(market, waypoint), 1);
 				const fuelCostToGetThereAndBack = bestFuelCost * distToMarket * 2; // round trip
 				const priceAtMarket = marketItem.sellPrice || 0;
 				const profit = unitsToSell * priceAtMarket - fuelCostToGetThereAndBack;
@@ -410,7 +479,8 @@ export class MarketService {
 		return {
 			market: bestMarket,
 			sellItem: bestItem,
-			proceeds: bestProceeds
+			proceeds: bestProceeds,
+			travelSpeed: travelSpeed
 		};
 	}
 }
@@ -442,7 +512,9 @@ export class UiMarket {
 }
 
 export class TradeRoute {
-	buyItem!: UiMarketItem;
+	waypointSymbol: string | null = null;
+	buyItem: UiMarketItem | null = null;
 	sellItem!: UiMarketItem;
 	profit!: number;
+	travelSpeed = 'CRUISE';
 }

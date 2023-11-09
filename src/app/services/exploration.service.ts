@@ -158,9 +158,8 @@ export class ExplorationService {
 			return waypoints[0];
 		}
 		waypoints = this.sortWaypointsByDistanceFrom(waypoints, startingLoc);
-		// for now, just go to the nearest uncharted waypoint:
-		return waypoints[0];
-		/*const locs = [];
+
+		const locs = [];
 		for (let waypoint of waypoints) {
 			if ((waypoint.x == startingLoc.x) &&
 			    (waypoint.y == startingLoc.y) &&
@@ -180,16 +179,15 @@ export class ExplorationService {
 			let nextLoc = null;
 			for (let i=0 ; i< route.length ; i++) {
 				if (route[i].x == startingLoc.x && route[i].y == startingLoc.y) {
+					// our current location is at index i. Check the elements at i-1 and i+1 to find the closest one:
 					const indexA = i>0 ? i-1: route.length-1;
 					const indexB = (i+1)< route.length ? i+1: 0;
-					const waypointA = route[indexA];
-					const waypointB = route[indexB];
-					const distA = LocXY.getDistance(startingLoc, waypointA);
-					const distB = LocXY.getDistance(startingLoc, waypointB);
+					const distA = LocXY.getDistance(startingLoc, route[indexA]);
+					const distB = LocXY.getDistance(startingLoc, route[indexB]);
 					if (distA < distB) {
-						nextLoc = waypointA;
+						nextLoc = route[indexA];
 					} else {
-						nextLoc = waypointB;
+						nextLoc = route[indexB];
 					}
 					break;
 				}
@@ -202,7 +200,9 @@ export class ExplorationService {
  				}
 			}
 		}
-		return null;*/
+		// Something went wrong - we couldn't find ourselves in the path list.
+		// for now, just go to the nearest uncharted waypoint:
+		return waypoints[0];
 	}
 
 	static bestRouteTo(waypointFrom: WaypointBase, waypointTo: WaypointBase,

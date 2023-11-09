@@ -51,9 +51,9 @@ export class ContractService implements OnInit {
 		const pageSize = 20;
 		this.getContracts(pageSize, startIndex)
 			.subscribe((response) => {
-				if (response.meta.total > startIndex + pageSize) {
+				if (response.meta.total > startIndex * pageSize) {
 					// There is more to get, wait 2 seconds and go get the next group:
-					this.getContractsFrom(startIndex + pageSize);
+					this.getContractsFrom(startIndex + 1);
 				}
 			});
 	}
@@ -106,7 +106,7 @@ export class ContractService implements OnInit {
 	// Contract API Calls
 	getContracts(limit: number, page: number) : Observable<{data: Contract[], meta: Meta}> {
 		const headers = this.accountService.getHeader();
-		const params = { limit, page	}
+		const params = { limit, page }
 		const observable = this.http.get<{data: Contract[], meta: Meta}>(`${this.apiUrlMyContracts}`, {headers, params})
       		  .pipe(shareReplay(1)); // Use the shareReplay operator so our service can subscribe, and so can the caller
 		observable.subscribe((response)=> {

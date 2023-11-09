@@ -1,6 +1,5 @@
 import { Component, Input } from '@angular/core';
 import { EventQueueService } from 'src/app/services/event-queue.service';
-import { LocXY } from 'src/models/LocXY';
 import { Ship } from 'src/models/Ship';
 import { WaypointBase } from 'src/models/WaypointBase';
 import { FleetService } from '../../services/fleet.service';

@@ -1,31 +1,71 @@
 <h1>Marketplace {{waypoint?.symbol}}</h1>
+<button (click)="onForceRefresh()" *ngIf="shipsAtWaypoint && shipsAtWaypoint.length>0">Force Refresh</button>
 <div class="text-container">
 	<div *ngIf="waypoint != null">
-		<div>
-			<h2>Trade Goods</h2>
-			<table>
-				<tr>
-					<th>Name</th>
-					<th>Type</th>
-					<th>Trade<br/>Volume</th>
-					<th>Supply</th>
-					<th>Purchase<br/>Price</th>
-					<th>Sell<br/>	Price</th>
-				</tr>
-				<tr *ngFor="let tradeGood of goods"
-				    [ngClass]="{ 'selected-row': tradeGood == selectedTradeItem }"
-					(click)="selectTradeItem(tradeGood)">
-					<td title="{{tradeGood.description}}">{{tradeGood.name}}</td>
-					<td class="centered">{{tradeGood.type}}</td>
-					<td class="numeric">{{tradeGood.purchasePrice == 0 ? '???' : tradeGood.tradeVolume}}</td>
-					<td class="centered">{{tradeGood.purchasePrice == 0 ? '???' : tradeGood.supply}}</td>
-					<td class="numeric">{{tradeGood.purchasePrice == 0 ? '???' : (tradeGood.purchasePrice | currency : 'USD' : 'symbol' : '1.0-0')}}</td>
-					<td class="numeric">{{tradeGood.purchasePrice == 0 ? '???' : (tradeGood.sellPrice | currency : 'USD' : 'symbol' : '1.0-0')}}</td>
-				</tr>
-			</table>
-			<div *ngIf="selectedTradeItem">
-				Qty:<input type="number" [(ngModel)]="buyTradeQty">
-				<button (click)="onBuyTradeItem()">buy</button>
+		<div class="text-container">
+			<div>
+				<h2>Trade Goods</h2>
+				<table>
+					<tr>
+						<th>Name</th>
+						<th>Type</th>
+						<th>Trade<br/>Volume</th>
+						<th>Supply</th>
+						<th>Purchase<br/>Price</th>
+						<th>Sell<br/>Price</th>
+						<th>Timestamp</th>
+					</tr>
+					<tr *ngFor="let tradeGood of goods"
+					    [ngClass]="{ 'selected-row': tradeGood == selectedTradeItem }"
+						(click)="selectTradeItem(tradeGood)">
+						<td title="{{tradeGood.description}}">{{tradeGood.name}}</td>
+						<td class="centered">{{tradeGood.type}}</td>
+						<td class="numeric">{{tradeGood.purchasePrice == 0 ? '???' : tradeGood.tradeVolume}}</td>
+						<td class="centered">{{tradeGood.purchasePrice == 0 ? '???' : tradeGood.supply}}</td>
+						<td class="numeric">{{tradeGood.purchasePrice == 0 ? '???' : (tradeGood.purchasePrice | currency : 'USD' : 'symbol' : '1.0-0')}}</td>
+						<td class="numeric">{{tradeGood.purchasePrice == 0 ? '???' : (tradeGood.sellPrice | currency : 'USD' : 'symbol' : '1.0-0')}}</td>
+						<td>{{formatDate(tradeGood.timestamp)}}</td>
+					</tr>
+				</table>
+				<div *ngIf="selectedTradeItem">
+					Qty:<input type="number" [(ngModel)]="buyTradeQty">
+					<button (click)="onBuyTradeItem()">buy</button>
+				</div>
+			</div>
+			<div *ngIf="selectedTradeItem && xScale">
+				<h3>Historical Prices for {{selectedTradeItem.symbol}}</h3>
+				<svg id="chart" width="450" height="200" xmlns="http://www.w3.org/2000/svg">
+					<rect x="0" y="0" width="400" height="200" fill="black"></rect>
+					<g *ngFor="let x of [0, 100, 200, 300, 400]">
+						<line [attr.x1]="x" [attr.x2]="x" y1="0" y2="200" stroke="white" stroke-width=".5"></line> 
+					</g>
+					<g *ngFor="let y of [0, 50, 100, 150, 200]">
+						<line x1="0" x2="400" [attr.y1]="y" [attr.y2]="y" stroke="white" stroke-width=".5"></line>
+						<text x="405" [attr.y]="getYCoordinate(y * maxPrice / 200) + y/25" font-size="12" fill="#888888">{{formatPrice(y * maxPrice / 200)}}</text> 
+					</g>
+					<g *ngFor="let item of itemHistory; let i = index">
+						<circle r="2" fill="blue"  
+						    [attr.cx]="getXCoordinate(item.timestamp)"
+							[attr.cy]="getYCoordinate(item.purchasePrice)">
+						</circle>
+						<circle r="2" fill="red"
+						    [attr.cx]="getXCoordinate(item.timestamp)"
+							[attr.cy]="getYCoordinate(item.sellPrice)">
+						</circle>
+						<line *ngIf="i>0"
+							[attr.x1]="getXCoordinate(itemHistory[i].timestamp)"
+							[attr.y1]="getYCoordinate(itemHistory[i].purchasePrice)"
+							[attr.x2]="getXCoordinate(itemHistory[i - 1].timestamp)"
+							[attr.y2]="getYCoordinate(itemHistory[i - 1].purchasePrice)"
+							stroke="blue" stroke-width=".5"></line>
+						<line *ngIf="i>0"
+							[attr.x1]="getXCoordinate(itemHistory[i].timestamp)"
+							[attr.y1]="getYCoordinate(itemHistory[i].sellPrice)"
+							[attr.x2]="getXCoordinate(itemHistory[i - 1].timestamp)"
+							[attr.y2]="getYCoordinate(itemHistory[i - 1].sellPrice)"
+							stroke="red" stroke-width=".5"></line>
+					</g> 
+				</svg>
 			</div>
 		</div>
 		<div>
@@ -41,20 +81,43 @@
 					</td>
 				</tr>
 				<tr>
-					<th>Market Symbol</th>
-					<th>Distance</th>
-					<th>Purchase Price</th>
-					<th>Sell Price</th>
-					<th>Trade Volume</th>
-					<th>Supply</th>
+					<th (click)="sortBy('marketSymbol')">Market Symbol
+						<span *ngIf="sortKey === 'marketSymbol' && sortDirection === 1">▲</span>
+						<span *ngIf="sortKey === 'marketSymbol' && sortDirection === -1">▼</span>
+					</th>
+					<th (click)="sortBy('distance')">Distance
+						<span *ngIf="sortKey === 'distance' && sortDirection === 1">▲</span>
+						<span *ngIf="sortKey === 'distance' && sortDirection === -1">▼</span>
+					</th>
+					<th (click)="sortBy('purchasePrice')">Purchase Price
+						<span *ngIf="sortKey === 'purchasePrice' && sortDirection === 1">▲</span>
+						<span *ngIf="sortKey === 'purchasePrice' && sortDirection === -1">▼</span>
+					</th>
+					<th (click)="sortBy('sellPrice')">Sell Price
+						<span *ngIf="sortKey === 'sellPrice' && sortDirection === 1">▲</span>
+						<span *ngIf="sortKey === 'sellPrice' && sortDirection === -1">▼</span>
+					</th>
+					<th (click)="sortBy('tradeVolume')">Trade Volume
+						<span *ngIf="sortKey === 'tradeVolume' && sortDirection === 1">▲</span>
+						<span *ngIf="sortKey === 'tradeVolume' && sortDirection === -1">▼</span>
+					</th>
+					<th (click)="sortBy('supply')">Supply
+						<span *ngIf="sortKey === 'supply' && sortDirection === 1">▲</span>
+						<span *ngIf="sortKey === 'supply' && sortDirection === -1">▼</span>
+					</th>
+					<th (click)="sortBy('timestamp')">Timestamp
+						<span *ngIf="sortKey === 'timestamp' && sortDirection === 1">▲</span>
+						<span *ngIf="sortKey === 'timestamp' && sortDirection === -1">▼</span>
+					</th>
 				</tr>
-				<tr *ngFor="let item of itemAtOtherMarkets">
+				<tr *ngFor="let item of itemAtOtherMarkets | sort:sortKey:sortDirection">
 					<td>{{item.marketSymbol}}</td>
-					<td>{{getDistanceToMarket(item.marketSymbol)}}</td>
+					<td>{{item.distance}}</td>
 					<td>{{item.purchasePrice}}</td>
 					<td>{{item.sellPrice}}</td>
 					<td>{{item.tradeVolume}}</td>
 					<td>{{item.supply}}</td>
+					<td>{{formatDate(item.timestamp)}}</td>
 				</tr>
 			</table>
 		</div>

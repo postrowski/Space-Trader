@@ -1,4 +1,5 @@
 	<div>
+		Credits: {{account?.credits | currency : 'USD' : 'symbol' : '1.0-0'}}<br/>
 		Ships At Waypoint:
 		<div cdkDropListGroup>
 			<table *ngFor="let ship of shipsAtWaypoint"
@@ -8,6 +9,7 @@
 					<td colspan="2">
 						<span class="shipname">{{ship.symbol}}</span><br>
 						<span class="shipframe">{{ship.frame.name.toLowerCase()}}</span>
+						<app-countdown [title]="'Cooldown'" *ngIf="ship.cooldown" [cooldown]="ship.cooldown"></app-countdown>
 					</td>
 					<td>
 						<div *ngIf="ship.nav.status === 'IN_TRANSIT'">
@@ -22,6 +24,8 @@
 					<td>
 						<button *ngIf="ship.nav.status !== 'IN_ORBIT'"
 							(click)="onOrbitShip(ship)">Orbit</button>
+						<button *ngIf="ship.nav.status != 'DOCKED'"
+						       (click)="onDockShip(ship)">Dock</button>
 					</td>
 				</tr>
 				<tr>
@@ -44,6 +48,10 @@
 			<div class="droppable-area emptyCargoSpot" cdkDropList
 				(cdkDropListDropped)="onDropJettison($event)">
 				<img src="assets/Trash.png">Jettison
+			</div>
+			<div class="droppable-area sellCargoSpot" cdkDropList
+				(cdkDropListDropped)="onDropSell($event)">
+				$$$ Sell $$$
 			</div>
 		</div>
 	</div>

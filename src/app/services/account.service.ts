@@ -1,6 +1,6 @@
 import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { Injectable } from '@angular/core';
-import { BehaviorSubject, Observable, throwError, shareReplay } from 'rxjs';
+import { BehaviorSubject, Observable, throwError, shareReplay, concatMap, map, of, timer, delay } from 'rxjs';
 import { Agent } from 'src/models/Agent';
 import { Contract } from 'src/models/Contract';
 import { Faction } from 'src/models/Faction';
@@ -13,7 +13,9 @@ import { DBService } from './db.service';
 })
 export class AccountService {
 	private apiUrl = 'https://api.spacetraders.io/v2/';
+	
 	token = "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZGVudGlmaWVyIjoiQkxBQ0tSQVQiLCJ2ZXJzaW9uIjoidjIuMS4xIiwicmVzZXRfZGF0ZSI6IjIwMjMtMTEtMDQiLCJpYXQiOjE2OTkxMTkxNDksInN1YiI6ImFnZW50LXRva2VuIn0.a66cFZcuaE-JntTg4VIz0ulrD_aWH0F5k_pAv4Krrj7Y9rRCWnbWHYD-Cu8g6ijv0u2ANiMDkAaRjIY6x4GoXpOw7yrgJhT59kD4yMuTWW34dpcLHjoodFSkGC74pax0Mw70gOO2JLiYPET7Br_oYNQZKiL2yLoixSqWj5bwrPdCorsmUMPhTVbUclCyhIscZmf6WpAPV0AZRwoaqq3RKn6cXuRjafx4u6yVXaLXJ_25uhbh0Tz9k1alGVPy2my8B9onu9KdRdcM2enTaTDefl2dU0zthOk50Mn4cPx7dsT4dv120frBEZiXAvKxxeUdDadYStCDLmqvE8Ur2FRiIg";
+	
 	errorMessages: string[] = [];
 	accountValid = false;
 
@@ -126,6 +128,42 @@ export class AccountService {
 				(error: any) => {
 				}
 			);
+	}
+
+	getAllAgents(): Observable<Agent[]> {
+		const observable = this.getAgents2(20, 1)
+		      		.pipe(shareReplay(1)); // Use the shareReplay operator so our service can subscribe, and so can the caller
+		observable.subscribe((response)=> {
+		}, (error) => {});
+		return observable;
+	}
+
+	getAgents2(limit: number, page: number): Observable<Agent[]> {
+		return this.getAgents(limit, page)
+				   .pipe(concatMap((response) => {
+						if (response.meta.total > limit * page) {
+							// If there are more pages, recursively load them
+							 return timer(400).pipe(delay(400), // Introduce a 400ms delay between requests
+							                        concatMap(() => this.getAgents2(limit, page + 1)),
+							                                  map((nextPageResults) => [...response.data, ...nextPageResults])
+							        );
+						}
+						// No more pages, just return the data from this page
+						return of(response.data);
+					})
+			);
+	}
+	
+	getAgents(limit: number, page: number): Observable<{data:Agent[], meta: Meta}> {
+		const params = {
+			limit: limit,
+			page: page
+		}
+		const observable = this.http.get<{data:Agent[], meta: Meta}>(`${this.apiUrl}/agents`, { params })
+      		.pipe(shareReplay(1)); // Use the shareReplay operator so our service can subscribe, and so can the caller
+		observable.subscribe((response)=> {
+		}, (error) => {});
+		return observable;
 	}
 
 	isFactionHQ(waypointSymbol: string) {

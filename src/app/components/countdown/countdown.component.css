@@ -3,7 +3,7 @@ td {
 }
 div {
 	text-align: center;
-	color: black;
+	color: black; /*text color of the time within the countdown block*/
 	font-weight: 800;
 }
 narrow {
@@ -23,7 +23,7 @@ x-wide {
 	text-align: center;
 	margin: 0px;
 	padding: 0px;
-	color: black;
+	color: darkgray;
 }
 .red-background {
   background-color: red;

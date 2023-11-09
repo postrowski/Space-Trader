@@ -10,7 +10,9 @@ import { FleetService } from 'src/app/services/fleet.service';
 })
 export class ContractsComponent {
 	contracts: Contract[] = [];
+	activeContract: Contract | null = null;
 	selectedContract?: Contract | null;
+	showHistory = false;
 	
 	constructor(public contractService: ContractService, public fleetService: FleetService) {
 		this.contractService.selectedContract$.subscribe((contract) => {
@@ -18,6 +20,9 @@ export class ContractsComponent {
 		});
 		this.contractService.allContracts$.subscribe((contracts) => {
 			this.contracts = contracts;
+		});
+		this.contractService.acceptedContract$.subscribe((contract) => {
+			this.activeContract = contract;
 		});
 	}
 	

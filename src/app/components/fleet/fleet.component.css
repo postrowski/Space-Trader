@@ -1,20 +1,20 @@
 h2 {
-	color: red;
+	color: grey;
 }
 table {
-	color: red;
-	border:3px solid red;
+	color: grey;
+	border:3px solid darkred;
 	border-collapse: collapse;
 }
 th {
 	text-align: right;
-	border:1px solid red;
+	border:1px solid darkred;
 	padding:3px;
 	margin:3px;
 }
 
 td{
-	border:1px solid red;
+	border:1px solid darkred;
 	padding:3px;
 	margin:3px;
 }

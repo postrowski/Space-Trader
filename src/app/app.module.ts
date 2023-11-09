@@ -34,6 +34,8 @@ import { WaypointBaseComponent } from './components/waypoint-base/waypoint-base.
 import { AutomationComponent } from './components/automation/automation.component';
 import { DiagnosticsComponent } from './components/diagnostics/diagnostics.component';
 import { ShiplistComponent } from './components/shiplist/shiplist.component';
+import { LeaderboardComponent } from './components/leaderboard/leaderboard.component';
+import { SortPipe } from './pipes/AgentSort';
 @NgModule({
 	declarations: [
 		AppComponent,
@@ -55,6 +57,7 @@ import { ShiplistComponent } from './components/shiplist/shiplist.component';
 		ShipDetailsComponent,
 		ShipyardComponent,
 		ShipyardShipComponent,
+		SortPipe,
 		SystemMapComponent,
 		SystemWaypointComponent,
 		TimeFormatPipe,
@@ -63,6 +66,7 @@ import { ShiplistComponent } from './components/shiplist/shiplist.component';
   AutomationComponent,
   DiagnosticsComponent,
   ShiplistComponent,
+  LeaderboardComponent,
 	],
 	imports: [
 		BrowserAnimationsModule,

@@ -314,12 +314,16 @@ export class TradeManager extends Manager {
 		for (const itemToBuy of itemsToBuy) {
 			const lowPrice = this.marketService.getItemHistoricalLowPriceAtMarket(waypoint.symbol, itemToBuy.symbol);
 			const currentPrices: Map<string, UiMarketItem> = this.marketService.getPricesForItemInSystemByWaypointSymbol(waypoint.symbol, itemToBuy.symbol);
+			if (currentPrices == null || currentPrices.size == 0) {
+				continue;
+			}
 			let minPrice = Infinity;
 			for (let item of currentPrices.values()) {
 				if (item.purchasePrice < minPrice) {
 					minPrice = item.purchasePrice;
 				}
 			}
+
 			let tooExpensive = (minPrice > lowPrice* 2);
 			if (tooExpensive || (credits < minPrice)) {
 				console.log(`Contract/construction item ${itemToBuy.symbol} too expensive at ${minPrice}, seen as low as ${lowPrice}`);

@@ -51,9 +51,9 @@ export class SystemMapComponent extends SvgMap {
 		});
 		
 		for (let i = 0; i < 600; i++) {
-			const x = Math.random() * this.width; // Adjust the range as needed
-			const y = Math.random() * this.height; // Adjust the range as needed
-			const size = .3 + Math.random() * .7; // Adjust the range as needed
+			const x = Math.random() * this.width;
+			const y = Math.random() * this.height;
+			const size = .3 + Math.random() * .7;
 			const color = this.rgbToHex(128+ Math.random() * 127,
 										128 + Math.random() * 127,
 										128 + Math.random() * 127);
@@ -273,6 +273,48 @@ export class SystemMapComponent extends SvgMap {
 		return WaypointBase.hasUncharted(waypoint);
 	}
 
+	darkenColor(htmlColor: string, factor: number) : string {
+	    let hex = htmlColor.replace(/^#/, ''); // Remove the leading #
+		if (hex.length === 3) {
+			// Expand the 3-digit RGB to 6-digit format
+			hex = hex
+				.split('')
+				.map(char => char.repeat(2))
+				.join('');
+		}
+	    const bigint = parseInt(hex, 16);
+	    const r = (bigint >> 16) & 255;
+	    const g = (bigint >> 8) & 255;
+	    const b = bigint & 255;
+	    
+	    return this.rgbToHex(Math.floor(r/factor),
+	    					 Math.floor(g/factor),
+	    					 Math.floor(b/factor));
+	}
+	
+	getShadowColor(waypoint: UiWaypoint) {
+		return this.darkenColor(waypoint.fillColor, 5);
+	}
+	getShadow(waypoint: UiWaypoint) {
+		const cx = this.xOffset + waypoint.loc.x * this.scale;
+		const cy = this.yOffset + waypoint.loc.y * this.scale;
+		const r = this.getSize(waypoint.base);
+		return `M${cx+r} ${cy} A${r} ${r} 0 0 1 ${cx-r} ${cy}`;
+ 	}
+ 	getShadowTransform(waypoint: UiWaypoint) {
+		const cx = this.xOffset + waypoint.loc.x * this.scale;
+		const cy = this.yOffset + waypoint.loc.y * this.scale;
+		const r = this.getSize(waypoint.base);
+		const angle = this.calculateAngle(waypoint.loc.x, 0-waypoint.loc.y) + 180;
+		return `rotate(${angle}, ${cx}, ${cy})`;
+	}
+	calculateAngle(x: number, y: number): number {
+		// Calculate the angle in radians using Math.atan2
+		const angleRadians = Math.atan2(x, y);
+
+		// Convert radians to degrees
+		return angleRadians * (180 / Math.PI);
+	}
 	onScale(): void {
 	}
 }

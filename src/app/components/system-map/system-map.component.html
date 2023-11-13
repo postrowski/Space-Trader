@@ -63,6 +63,7 @@
 			stroke-width="1" (click)="systemClick(waypoint)" style="cursor: pointer;">
       <title>{{ waypoint.base.type }} {{waypoint.base.symbol}} - [{{waypoint.base.x}}, {{waypoint.base.y}}]</title>
     </circle>
+	<path [attr.d]="getShadow(waypoint)" [attr.fill]="getShadowColor(waypoint)" [attr.transform]="getShadowTransform(waypoint)" />
   </g>
     <!-- Text descriptor of each waypoint -->
   <g *ngFor="let waypoint of uiWaypoints">

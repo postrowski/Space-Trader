@@ -2,10 +2,11 @@ import { Component, Input, OnInit } from '@angular/core';
 import { AccountService } from 'src/app/services/account.service';
 import { FleetService } from 'src/app/services/fleet.service';
 import { GalaxyService } from 'src/app/services/galaxy.service';
-import { MarketItemType, MarketService, UiMarketItem } from 'src/app/services/market.service';
+import { MarketService, UiMarketItem } from 'src/app/services/market.service';
 import { ModalService } from 'src/app/services/modal.service';
 import { Agent } from 'src/models/Agent';
 import { LocXY } from 'src/models/LocXY';
+import { MarketItemType } from 'src/models/Market';
 import { Ship } from 'src/models/Ship';
 import { ShipCargoItem } from 'src/models/ShipCargoItem';
 import { WaypointBase, WaypointTrait } from 'src/models/WaypointBase';
@@ -24,6 +25,7 @@ export class MarketplaceComponent implements OnInit{
 	itemAtOtherMarkets: UiMarketItemWithDist[] =[];
 	goods: TypedMarketItem[] = [];
 	shipsAtWaypoint: Ship[] = [];
+	allShips: Ship[] = [];
 	selectedShip: Ship | null = null;
 	selectedTradeItem: TypedMarketItem | null = null;
 	selectedCargoItem: ShipCargoItem | null = null;
@@ -49,10 +51,14 @@ export class MarketplaceComponent implements OnInit{
 		modalService.waypoint$.subscribe((response) => {
 			this.waypoint = response;
 			this.ngOnInit();
-		})
+		});
 		accountService.agent$.subscribe((response) => {
 			this.account = response;
-		})
+		});
+		this.fleetService.allShips$.subscribe((allShips) => {
+			this.allShips = allShips;
+			this.loadShips();
+		});
 	}
 	
 	ngOnInit(): void {
@@ -104,6 +110,7 @@ export class MarketplaceComponent implements OnInit{
 					name: marketItem.symbol,
 					tradeVolume: marketItem.tradeVolume,
 					supply: marketItem.supply,
+					activity: marketItem.activity || 'STATIC',
 					purchasePrice: marketItem.purchasePrice,
 					sellPrice: marketItem.sellPrice,
 					description: '',
@@ -126,7 +133,7 @@ export class MarketplaceComponent implements OnInit{
 		if (this.waypoint && this.hasMarketplace()) {
 			this.marketService.getMarketplace(this.waypoint.symbol, this.shipsAtWaypoint.length> 0)
 			                  .subscribe((response) => {
-								  this.updateMarket(response);
+				this.updateMarket(response);
 			});
 		}
 		const systemSymbol = GalaxyService.getSystemSymbolFromWaypointSymbol(this.waypoint?.symbol || '');
@@ -139,21 +146,19 @@ export class MarketplaceComponent implements OnInit{
 		return 0;
 	}
 	loadShips() {
-		this.fleetService.allShips$.subscribe((allShips) => {
-			this.shipsAtWaypoint.length = 0;
-			for (let ship of allShips) {
-				if (ship.nav?.waypointSymbol == this.waypoint?.symbol) {
-					this.shipsAtWaypoint.push(ship);
-					if (this.selectedShip == null) {
-						this.selectedShip = ship;
-					}
+		this.shipsAtWaypoint.length = 0;
+		for(const ship of this.allShips) {
+			if (ship.nav?.waypointSymbol == this.waypoint?.symbol) {
+				this.shipsAtWaypoint.push(ship);
+				if (this.selectedShip == null) {
+					this.selectedShip = ship;
 				}
 			}
 			let fleetActiveShip = this.fleetService.getActiveShip();
 			if (fleetActiveShip && this.shipsAtWaypoint.includes(fleetActiveShip)) {
 				this.selectedShip = fleetActiveShip;
 			}
-		})
+		}
 	}
 	selectTradeItem(item: TypedMarketItem) {
 		this.selectedTradeItem = item;
@@ -178,11 +183,16 @@ export class MarketplaceComponent implements OnInit{
 		}
 	}
 	private getNextBiggestNumber(num: number) : number {
+		num = num * 1.1;
 	   	const orderOfMagnitude = Math.floor(Math.log10(num));
 		const nextTen =  10 ** (orderOfMagnitude + 1);
-		if (num*2 > nextTen)
+		if (num*2 > nextTen) {
 			return nextTen;
-		return nextTen / 2;
+		}
+		if (num*4 > nextTen) {
+			return nextTen / 2;
+		}
+		return nextTen / 4;
 	}
 	formatPrice(num: number): string {
 		return '$' + num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
@@ -191,7 +201,7 @@ export class MarketplaceComponent implements OnInit{
 	private createScale(domainStart: number, domainEnd: number, rangeStart: number, rangeEnd: number): (value: number) => number {
 		const domainRange = domainEnd - domainStart;
 		const rangeRange = rangeEnd - rangeStart;
-		return (value: number) => ((value - domainStart) / domainRange) * rangeRange + rangeStart;
+		return (value: number) => ((domainRange == 0) ? 0 : ((value - domainStart) / domainRange) * rangeRange) + rangeStart;
 	}
 	
 	getXCoordinate(timestamp: Date): number {
@@ -217,6 +227,7 @@ export class MarketplaceComponent implements OnInit{
 					type: item.type,
 					timestamp: item.timestamp,
 					symbol: item.symbol,
+					activity: item.activity,
 					purchasePrice: item.purchasePrice,
 					sellPrice: item.sellPrice,
 					supply: item.supply,
@@ -293,12 +304,18 @@ export class MarketplaceComponent implements OnInit{
 			});
 		}
 	}
+	onMarketClick(marketSymbol: string) {
+		this.waypoint = this.galaxyService.getWaypointByWaypointSymbol(marketSymbol);
+		this.loadShips();
+		this.loadMarket();
+	}
 }
 export class TypedMarketItem {
 	symbol!: string;
 	name!: string;
 	tradeVolume!: number;
 	supply!: string;
+	activity!: string;
 	purchasePrice!: number;
 	sellPrice!: number;
 	description!: string;

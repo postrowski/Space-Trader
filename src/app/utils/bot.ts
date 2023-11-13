@@ -13,6 +13,7 @@ import { MarketService, TradeRoute, UiMarketItem } from "../services/market.serv
 import { ConstructionSite } from "src/models/ConstructionSite";
 import { ConstructionService } from "../services/construction.service";
 import { System } from "src/models/System";
+import { Manager } from "./manager";
 
 export enum Role {
 	Miner,
@@ -26,6 +27,7 @@ export enum Role {
 
 export class Bot {
 	ship: Ship;
+	manager: Manager | null = null;
 	automationService: AutomationService;
 	role: Role = Role.SurveyorMiner;
 
@@ -120,7 +122,7 @@ export class Bot {
 
 		const system = this.galaxyService.getSystemBySymbol(systemSymbol);
 		let mustDrift = false;
-		if (system && system.waypoints) {
+		if (system && system.waypoints && this.ship.fuel.capacity > 0) {
 			const currentWaypoints = system.waypoints.filter((way) => way.symbol == this.ship.nav.waypointSymbol);
 			if (currentWaypoints && currentWaypoints.length == 1) {
 				const currentWaypoint = currentWaypoints[0];
@@ -671,7 +673,7 @@ export class Bot {
 			if (inv.symbol.endsWith("_ORE")) {
 				for (let otherShip of shipsWithSpace) {
 					if (otherShip.role == Role.Refinery) {
-						this.transferCargo(otherShip.ship, inv);
+						this.transferCargo(otherShip, inv);
 					}
 				}
 			}
@@ -679,17 +681,17 @@ export class Bot {
 			const shipsWithSameItem = shipsWithSpace.filter((bot) => bot.ship.cargo.inventory.some((i) => i.symbol == inv.symbol));
 			const biggerShipsWithSameItem = shipsWithSameItem.filter((bot) => bot.ship.cargo.capacity > this.ship.cargo.capacity);
 			for (let otherShip of biggerShipsWithSameItem) {
-				this.transferCargo(otherShip.ship, inv);
+				this.transferCargo(otherShip, inv);
 			}
 			// then look for a similar-sized ship that already has some of the items we are transferring
 			const similarShipsWithSameItem = shipsWithSameItem.filter((bot) => bot.ship.cargo.capacity == this.ship.cargo.capacity);
 			for (let otherShip of similarShipsWithSameItem) {
-				this.transferCargo(otherShip.ship, inv);
+				this.transferCargo(otherShip, inv);
 			}
 			// If we couldn't find a ship with the same item, just transfer to any bigger ship
 			const biggerShips = shipsWithSpace.filter((bot) => bot.ship.cargo.capacity > this.ship.cargo.capacity);
 			for (let otherShip of biggerShips) {
-				this.transferCargo(otherShip.ship, inv);
+				this.transferCargo(otherShip, inv);
 			}
 		}
 	}
@@ -832,18 +834,19 @@ export class Bot {
 		}
 	}
 	
-	transferCargo(otherShip: Ship, inv:ShipCargoItem) {
-		let freeSpace = otherShip.cargo.capacity - otherShip.cargo.units;
+	transferCargo(otherBot: Bot, inv:ShipCargoItem) {
+		let freeSpace = otherBot.ship.cargo.capacity - otherBot.ship.cargo.units;
 		if (freeSpace > 0) {
-			if (this.ship.nav.status != otherShip.nav.status) {
-				if (otherShip.nav.status == 'IN_ORBIT') {
+			if (this.ship.nav.status != otherBot.ship.nav.status) {
+				if (otherBot.ship.nav.status == 'IN_ORBIT') {
 					this.orbit();
-				} else if (otherShip.nav.status == 'DOCKED') {
+				} else if (otherBot.ship.nav.status == 'DOCKED') {
 					this.dock();
 				}
 			}
-			this.currentStep = new ExecutionStep(this, `transfer ${inv.units} units of ${inv.symbol} to ${otherShip.symbol}`);
-			this.fleetService.transferCargo(this.ship.symbol, otherShip.symbol, inv.symbol, Math.min(freeSpace, inv.units))
+			otherBot.addMessage(`recieving transfer of ${inv.units} units of ${inv.symbol} from ${this.ship.symbol}`);
+			this.currentStep = new ExecutionStep(this, `transfer ${inv.units} units of ${inv.symbol} to ${otherBot.ship.symbol}`);
+			this.fleetService.transferCargo(this.ship.symbol, otherBot.ship.symbol, inv.symbol, Math.min(freeSpace, inv.units))
 				             .subscribe((response) => {
 					this.completeStep();
 				}, (error) => {
@@ -888,7 +891,7 @@ export class Bot {
 				if (otherBot.ship.nav.status == this.ship.nav.status) {
 					for (let inv of otherBot.ship.cargo.inventory) {
 						if (inv.symbol.endsWith("_ORE")) {
-							otherBot.transferCargo(this.ship, inv);
+							otherBot.transferCargo(this, inv);
 						}
 					}
 				}
@@ -1006,52 +1009,23 @@ export class Bot {
 			throw this.currentStep;
 		}
 	}
-	
-	exploreSystems(startingLoc: WaypointBase) {
-		if (this.role != Role.Explorer || !this.automationService.agent) {
+
+	getMarket(waypoint: WaypointBase) {
+		if (!WaypointBase.hasMarketplace(waypoint)) {
 			return;
 		}
-		const startingSystemStr = this.automationService.agent.headquarters;
-		const startingSystem = this.galaxyService.getSystemBySymbol(startingSystemStr);
-		const system = startingSystem;
-		if (Ship.containsModule(this.ship, "MODULE_WARP_DRIVE_")) {
-			// we can warp to nearby systems
-		} else if (system) {
-			const nextSystemSymbol = this.explorationService.exploreSystems(this.ship);
-			if (nextSystemSymbol && nextSystemSymbol != this.ship.nav.systemSymbol) {
-				const jumpgates = this.automationService.jumpgateService.getJumpgatesBySystemSymbol(this.ship.nav.systemSymbol);
-				if (jumpgates && jumpgates.length > 0) {
-					const waypoint = this.galaxyService.getWaypointByWaypointSymbol(jumpgates[0].symbol!);
-					if (waypoint) {
-						this.navigateTo(waypoint, null,
-										`Going to jumpgate at ${waypoint.symbol} to explore system.`);
-					}
-					this.jumpTo(nextSystemSymbol);
-				}
-			}
-			// First look for markets we haven't visited in 12 hours or more
-			this.exploreMarkets(startingLoc, system, Date.now() - 1000 * 60 * 60 * 12);
-			// Then check for markets we haven't visited within the last 30 minutes
-			this.exploreMarkets(startingLoc, system, Date.now() - 1000 * 60 * 30);
-			// Then check for markets we haven't visited within the last 5 minutes
-			this.exploreMarkets(startingLoc, system, Date.now() - 1000 * 60 * 5);
+		if (!this.marketService.hasPriceData(waypoint.symbol)) {
+			const step = new ExecutionStep(null, `getting market ${waypoint.symbol}`);
+			this.marketService.getMarketplace(waypoint.symbol, true)
+			                  .subscribe((response) => {
+				this.completeStep();
+			}, (error) => {
+				this.onError(error);
+			});
+			throw step;
 		}
 	}
-	exploreMarkets(startingLoc: WaypointBase, system: System, tooOld: number) {
-		const marketSymbols = this.marketService.getMarketSymbolsInSystem(system.symbol);
-		const marketsToVisit: string[] = [];
-		for (let marketSymbol of marketSymbols || []) {
-			const lastUpdateDate = this.marketService.lastUpdateDate(marketSymbol);
-			if (lastUpdateDate == null || lastUpdateDate.getTime() < tooOld) {
-				marketsToVisit.push(marketSymbol);
-			}
-		}
-		const waypointsToVisit = system.waypoints?.filter((wp) => marketsToVisit.includes(wp.symbol));
-		if (waypointsToVisit && waypointsToVisit.length > 0) {
-			this.traverseWaypoints(waypointsToVisit, startingLoc, `updating markets`);
-		}
-	}
-
+	
 
 	traverseWaypoints(waypoints: WaypointBase[], startingLoc: WaypointBase, reason: string) {
 		if (waypoints.length == 1) {

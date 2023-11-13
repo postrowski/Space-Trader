@@ -9,11 +9,23 @@ import { FleetService } from 'src/app/services/fleet.service';
 })
 export class AutomationComponent {
 	running: boolean = false;
-	
+
+	allShipSymbols: string[] = [];
+	allowShips: { shipSymbol: string, value: boolean }[] = [];
+
 	constructor(public automationService: AutomationService,
 	            public fleetService: FleetService) {
 		this.automationService.running$.subscribe((running) => {
 			this.running = running;
+		});
+		this.fleetService.allShips$.subscribe((ships) => {
+			for (const ship of ships) {
+				if (this.allShipSymbols.includes(ship.symbol)) {
+					continue;
+				}
+				this.allShipSymbols.push(ship.symbol);
+				this.allowShips.push({shipSymbol: ship.symbol, value: true});
+			}
 		});
 	}
 	onStart() {
@@ -24,5 +36,8 @@ export class AutomationComponent {
 	}
 	onStop() {
 		this.automationService.stop();
+	}
+	onAllowShipsChanged() {
+		this.automationService.setActiveShips(this.allowShips);
 	}
 }

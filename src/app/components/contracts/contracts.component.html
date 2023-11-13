@@ -14,7 +14,7 @@
 			</span>
 			<br/>
 			<input id="showHist" type="checkbox" [(ngModel)]="showHistory">
-			<label for="showHist">Show History</label>
+			<label for="showHist">Show History ({{contracts.length}})</label>
 			<br/>
 			<span *ngIf="showHistory">
 				<span *ngFor="let contract of contracts" [ngClass]="{ 'selected-row': contract === selectedContract}"

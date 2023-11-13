@@ -9,7 +9,9 @@
 					<td colspan="2">
 						<span class="shipname">{{ship.symbol}}</span><br>
 						<span class="shipframe">{{ship.frame.name.toLowerCase()}}</span>
-						<app-countdown [title]="'Cooldown'" *ngIf="ship.cooldown" [cooldown]="ship.cooldown"></app-countdown>
+					</td>
+					<td>
+						<app-countdown [title]="'Cooldown'" [cooldown]="ship.cooldown"></app-countdown>
 					</td>
 					<td>
 						<div *ngIf="ship.nav.status === 'IN_TRANSIT'">
@@ -17,15 +19,8 @@
 								[startTimeStr]="ship.nav.route.departureTime"
 								[endTimeStr]="ship.nav.route.arrival"></app-countdown>
 						</div>
-						<div *ngIf="(ship.nav.status !== 'IN_TRANSIT')">
-							<app-countdown [title]="'Cooldown'" [cooldown]="ship.cooldown"></app-countdown>
-						</div>
-					</td>
-					<td>
-						<button *ngIf="ship.nav.status !== 'IN_ORBIT'"
-							(click)="onOrbitShip(ship)">Orbit</button>
-						<button *ngIf="ship.nav.status != 'DOCKED'"
-						       (click)="onDockShip(ship)">Dock</button>
+						<button *ngIf="ship.nav.status === 'DOCKED'" (click)="onOrbitShip(ship)">Orbit</button>
+						<button *ngIf="ship.nav.status === 'IN_ORBIT'" (click)="onDockShip(ship)">Dock</button>
 					</td>
 				</tr>
 				<tr>
@@ -40,18 +35,18 @@
 						</div>
 					</td>
 					<td colspan="2">
-						<button *ngIf="showSurvey && canSurvey(ship)" (click)="onCreateSurvey(ship)">Survey</button> <br *ngIf="canSurvey(ship)" />
-						<button *ngIf="showMine" (click)="onMine(ship)">Mine</button>
+						<button *ngIf="showSurvey == 'true' && canSurvey(ship)" (click)="onCreateSurvey(ship)">Survey</button> <br *ngIf="canSurvey(ship)" />
+						<button *ngIf="showMine == 'true'" (click)="onMine(ship)">Mine</button>
 					</td>
 				</tr>
 			</table>
-			<div class="droppable-area emptyCargoSpot" cdkDropList
+			<div class="droppable-area jettisonCargoSpot" cdkDropList
 				(cdkDropListDropped)="onDropJettison($event)">
 				<img src="assets/Trash.png">Jettison
 			</div>
 			<div class="droppable-area sellCargoSpot" cdkDropList
-				(cdkDropListDropped)="onDropSell($event)">
-				$$$ Sell $$$
+			     *ngIf="showSell == 'true'" (cdkDropListDropped)="onDropSell($event)">
+				$ Sell
 			</div>
 		</div>
 	</div>

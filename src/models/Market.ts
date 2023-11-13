@@ -17,10 +17,18 @@ export class MarketItem {
 
 export class MarketTradeGood {
 	symbol!: string;
+	type!: MarketItemType;
 	tradeVolume!: number;
 	supply!: string;
+	activity!: string;
 	purchasePrice!: number;
 	sellPrice!: number;
+}
+
+export enum MarketItemType {
+	EXPORT,
+	IMPORT,
+	EXCHANGE
 }
 
 export enum Supply {

@@ -130,7 +130,6 @@ export class GalaxyService {
 		return elements[0]+'-'+elements[1];
 	}
 	setActiveSystemWaypointBySymbol(systemWaypointSymbol: string) {
-		console.log(`GalaxyService/setActiveSystemWaypointBySymbol(${systemWaypointSymbol})`);
 		const systemSymbol = GalaxyService.getSystemSymbolFromWaypointSymbol(systemWaypointSymbol);
 		const system = this.getActiveSystem();
 		if (system == null) {
@@ -280,7 +279,6 @@ export class GalaxyService {
 	}
 	private getWaypointsPage(systemSymbol:string, page: number) : Observable<{data: Waypoint[], meta: Meta}> {
 		systemSymbol = GalaxyService.getSystemSymbolFromWaypointSymbol(systemSymbol);
-		console.log(`galaxyService.getWaypoints(${systemSymbol}) @${this.apiUrlSystems}/${systemSymbol}/waypoints`);
 		const headers = this.accountService.getHeader();
 		const params = {limit: this.pageSize, page: page};
 		const observable = this.http.get<{data: Waypoint[], meta: Meta}>

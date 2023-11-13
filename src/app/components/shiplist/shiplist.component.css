@@ -1,17 +1,23 @@
 
 .selected-ship {
-  background-color: #ffd0d0;
+  background-color: darkslategray;
 }
 .selected-cargo {
-  background-color: #d0ffd0;
+  background-color: green;
 }
 .cargoItem {
-	background-color: #DDDDFF;
+	background-color: darkgreen;
+}
+.jettisonCargoSpot{
+	background-color: darkred;
+}
+.sellCargoSpot{
+	background-color: darkgoldenrod;
 }
 .emptyCargoSpot{
-	background-color: #DDDDDD;
+	background-color: #555555;
 }
-.cargoItem, .emptyCargoSpot {
+.cargoItem, .emptyCargoSpot, .jettisonCargoSpot, .sellCargoSpot {
 	padding: 2px;
 	border: 1px solid black;
 	border-radius: 5px;

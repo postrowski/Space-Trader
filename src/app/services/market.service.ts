@@ -1,7 +1,7 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 import { liveQuery } from 'dexie';
-import { Market, MarketTradeGood } from 'src/models/Market';
+import { Market, MarketItemType, MarketTradeGood } from 'src/models/Market';
 import { AccountService } from './account.service';
 import { DBService } from './db.service';
 import { GalaxyService } from './galaxy.service';
@@ -89,7 +89,7 @@ export class MarketService {
 			while (marketItems.length > 0 && marketItems[0].purchasePrice == 0) {
 				marketItems.shift();
 			}
-			if (marketItems.length > 0) {
+			if (marketItems.length > 1) {
 				const previousMarketItem = marketItems[marketItems.length-1];
 				if (previousMarketItem.marketSymbol == marketItem.marketSymbol &&
 				    previousMarketItem.purchasePrice == marketItem.purchasePrice &&
@@ -104,7 +104,6 @@ export class MarketService {
 					continue;
 				}
 			}
-			console.log(`new MarketItem found ${marketItem.marketSymbol} ${marketItem.symbol}, buy ${marketItem.purchasePrice}, sell ${marketItem.sellPrice}`);
 			marketItems.push(marketItem);
 		}
 	}
@@ -315,6 +314,7 @@ export class MarketService {
 			const marketItem = new UiMarketItem(transaction.waypointSymbol, transaction.tradeSymbol, currentItem?.type);
 			marketItem.supply        = currentItem.supply;
 			marketItem.tradeVolume   = currentItem.tradeVolume;
+			marketItem.activity      = currentItem.activity;
 			if (transaction.type == 'SELL') {
 				marketItem.sellPrice     = transaction.pricePerUnit;
 				marketItem.purchasePrice = currentItem.purchasePrice;
@@ -485,20 +485,16 @@ export class MarketService {
 	}
 }
 
-export enum MarketItemType {
-	EXPORT,
-	IMPORT,
-	EXCHANGE
-}
 export class UiMarketItem extends MarketTradeGood {
 	marketSymbol!: string;
-	type!: MarketItemType;
 	timestamp!: Date;
-	constructor(marketSymbol: string, tradeSymbol: string, type: MarketItemType, tradeGood?: MarketTradeGood) {
+	constructor(marketSymbol: string, tradeSymbol: string, type: MarketItemType,
+	            tradeGood?: MarketTradeGood) {
 		super();
 		this.marketSymbol  = marketSymbol;
 		this.symbol        = tradeSymbol;
 		this.type          = type;
+		this.activity      = tradeGood?.activity || 'STATIC';
 		this.timestamp     = new Date();
 		this.purchasePrice = tradeGood?.purchasePrice || 0;
 		this.sellPrice     = tradeGood?.sellPrice || 0;

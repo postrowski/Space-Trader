@@ -79,7 +79,6 @@ export class GalaxyComponent {
 		}
 	}
 	findNearbySystems(loc: LocXY, distance: number, previousSearchCount: number) {
-		console.log(`Looking for systems within ${distance}`)
 		this.findSystemsNearLocation(loc, distance)
 			.then((result: System[]) => {
 				console.log(`found ${result.length} systems within ${distance}`)

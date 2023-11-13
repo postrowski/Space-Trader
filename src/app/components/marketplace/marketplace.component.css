@@ -4,8 +4,11 @@
 	/* This pushes the inner divs to each side */
 }
 
+.currentMarket {
+  background-color: #448844;
+}
 .selected-row {
-	background-color: #d0ffd0;
+	background-color: #448844;
 }
 
 .selected-ship {

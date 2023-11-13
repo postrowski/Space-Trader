@@ -1,7 +1,7 @@
 
 import { HttpClient } from '@angular/common/http';
 import { Injectable, OnInit } from '@angular/core';
-import { BehaviorSubject, map, Observable, shareReplay } from 'rxjs';
+import { BehaviorSubject, concatMap, delay, map, Observable, of, shareReplay, timer } from 'rxjs';
 import { Agent } from 'src/models/Agent';
 import { Contract } from 'src/models/Contract';
 import { ShipCargo } from 'src/models/ShipCargo';
@@ -35,7 +35,7 @@ export class ContractService implements OnInit {
 	getSelectedContract(): Contract | null {
 		return this.selectedContractSubject.value;
 	}
-	getAllContracts(): Contract[] {
+	getContracts(): Contract[] {
 		return this.allContractsSubject.value;
 	}
 
@@ -44,37 +44,26 @@ export class ContractService implements OnInit {
 	            public fleetService: FleetService) {
 	}
 
-	updateContracts() {
-		this.getContractsFrom(1);
-	}
-	getContractsFrom(startIndex: number) {
-		const pageSize = 20;
-		this.getContracts(pageSize, startIndex)
-			.subscribe((response) => {
-				if (response.meta.total > startIndex * pageSize) {
-					// There is more to get, wait 2 seconds and go get the next group:
-					this.getContractsFrom(startIndex + 1);
-				}
-			});
-	}
-
 	ngOnInit() {
 		this.selectFirstContract();
 	}
 	selectFirstContract() {
 		// Set the selectedContract to the first Contract in the list
 		if (this.allContractsSubject.value.length > 0) {
-			this.setSelectedContract(this.allContractsSubject.value[0]);
+			const unfulfilled = this.allContractsSubject.value.filter((c)=> !c.fulfilled);
+			if (unfulfilled && unfulfilled.length > 0) {
+				this.setSelectedContract(unfulfilled[0]);
+			} else {
+				this.setSelectedContract(this.allContractsSubject.value[0]);
+			}
 		}
 	}
 	getContractForAcceptance(contract: Contract) {
 		if (contract.accepted && !contract.fulfilled) {
-			console.log("getContractForAcceptance: " + contract.id);
 			this.acceptedContractSubject.next(contract);
 		} else {
 			const acceptedContract = this.acceptedContractSubject.getValue();
 			if (acceptedContract && acceptedContract.fulfilled) {
-				console.log("getContractForAcceptance: 'null'");
 				this.acceptedContractSubject.next(null);
 			}
 		}
@@ -82,40 +71,63 @@ export class ContractService implements OnInit {
 	private addContract(newContract: Contract) {
 		for (let contract of this.allContractsSubject.value) {
 			if (contract.id == newContract.id) {
-				console.log(`addContract - update existing - id: ${newContract.id}, ac: ${newContract.accepted}, ff:${newContract.fulfilled}`);
 				contract.update(newContract);
 				this.getContractForAcceptance(contract);
 				return;
 			}
 		}
-		console.log(`addContract - new - id: ${newContract.id}, ac: ${newContract.accepted}, ff:${newContract.fulfilled}`);
 		const contract = new Contract();
 		contract.update(newContract);
-		console.log(`addContract - new actual - id: ${contract.id}, ac: ${contract.accepted}, ff:${contract.fulfilled}`);
 		this.getContractForAcceptance(contract);
 		this.allContractsSubject.value.push(contract);
 		
 		let selectedContract = this.getSelectedContract();
-		if (selectedContract == null || this.getAllContracts().indexOf(selectedContract) == -1) {
+		if (selectedContract == null || this.getContracts().indexOf(selectedContract) == -1) {
 			this.selectFirstContract();
 		}
 	};
 	
 	
+	
 	//////////////////////
 	// Contract API Calls
-	getContracts(limit: number, page: number) : Observable<{data: Contract[], meta: Meta}> {
+	getAllContracts(): Observable<Contract[]> {
+		const observable = this.getContracts2(20, 1)
+		      		.pipe(shareReplay(1)); // Use the shareReplay operator so our service can subscribe, and so can the caller
+		observable.subscribe((response)=> {
+		}, (error) => {});
+		return observable;
+	}
+
+	getContracts2(limit: number, page: number): Observable<Contract[]> {
+		return this.getContractsApi(limit, page)
+				   .pipe(concatMap((response) => {
+						if (response.meta.total > limit * page) {
+							// If there are more pages, recursively load them
+							 return timer(400).pipe(delay(400), // Introduce a 400ms delay between requests
+							                        concatMap(() => this.getContracts2(limit, page + 1)),
+							                                  map((nextPageResults) => [...response.data, ...nextPageResults])
+							        );
+						}
+						// No more pages, just return the data from this page
+						return of(response.data);
+					})
+			);
+	}
+	
+	getContractsApi(limit: number, page: number): Observable<{data:Contract[], meta: Meta}> {
 		const headers = this.accountService.getHeader();
 		const params = { limit, page }
 		const observable = this.http.get<{data: Contract[], meta: Meta}>(`${this.apiUrlMyContracts}`, {headers, params})
-      		  .pipe(shareReplay(1)); // Use the shareReplay operator so our service can subscribe, and so can the caller
+      		.pipe(shareReplay(1)); // Use the shareReplay operator so our service can subscribe, and so can the caller
 		observable.subscribe((response)=> {
 			for (const contract of response.data) {
 				this.addContract(contract);
 			}
 		}, (error) => {});
-	    return observable;
+		return observable;
 	}
+
 	negotiateContract(shipSymbol: string): Observable<{ data: {contract: Contract}}>{
 		const headers = this.accountService.getHeader();
 		const observable = this.http.post<{ data: {contract: Contract}}>
@@ -123,7 +135,6 @@ export class ContractService implements OnInit {
 				{}, { headers })
       		.pipe(shareReplay(1)); // Use the shareReplay operator so our service can subscribe, and so can the caller
 		observable.subscribe((response)=> {
-			console.log(`negotiateContract success`);
 			this.addContract(response.data.contract);
 		}, (error) => {});
 		return observable;
@@ -143,7 +154,6 @@ export class ContractService implements OnInit {
 		                     (`${this.apiUrlMyContracts}/${contractId}/accept`, {}, { headers })
       		.pipe(shareReplay(1)); // Use the shareReplay operator so our service can subscribe, and so can the caller
 		observable.subscribe((response)=> {
-			console.log(`acceptContract success`);
 			this.addContract(response.data.contract);
 			this.accountService.updateAgent(response.data.agent);
 		}, (error) => {});
@@ -158,7 +168,6 @@ export class ContractService implements OnInit {
 		                     (`${this.apiUrlMyContracts}/${contractId}/deliver`, body, { headers })
       		.pipe(shareReplay(1)); // Use the shareReplay operator so our service can subscribe, and so can the caller
 		observable.subscribe((response)=> {
-			console.log(`deliverCargo success`);
 			this.addContract(response.data.contract);
 			this.fleetService.updateShipCargo(shipSymbol, response.data.cargo);
 		}, (error) => {});
@@ -170,7 +179,6 @@ export class ContractService implements OnInit {
 		                     (`${this.apiUrlMyContracts}/${contractId}/fulfill`, {}, { headers })
       		.pipe(shareReplay(1)); // Use the shareReplay operator so our service can subscribe, and so can the caller
 		observable.subscribe((response)=> {
-			console.log(`sulfillContract success`);
 			this.addContract(response.data.contract)
 			this.accountService.updateAgent(response.data.agent);
 		}, (error) => {});

@@ -2,7 +2,7 @@ th-right th{
 	text-align: right;
 }
 th, td {
-	border:1px solid red;
+	border:1px solid black;
 	padding:3px;
 	margin:3px;
 }
@@ -13,16 +13,20 @@ tr.centered-tds td {
 
 .selected-row {
   background-color: #e0e0e0;
+  color: black;
 }
 
 .empty.mount, .empty.module {
 	background-color: #DDDDDD;
+  color: black;
 }
 .module {
 	background-color: #DDFFDD;
+  color: black;
 }
 .mount {
 	background-color: #DDDDFF;
+  color: black;
 }
 .module, .mount{
 	padding: 2px;

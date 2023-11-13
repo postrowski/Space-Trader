@@ -6,6 +6,7 @@ import { Shipyard } from 'src/models/Shipyard';
 import { System } from 'src/models/System';
 import { Waypoint } from 'src/models/Waypoint';
 import { UiMarketItem } from './market.service';
+import { LogMessage } from '../utils/log-message';
 
 @Injectable({
 	providedIn: 'root',
@@ -18,11 +19,12 @@ export class DBService {
 	waypoints!: Dexie.Table<Waypoint, string>;
 	agent!: Dexie.Table<Agent, string>;
 	jumplinks!: Dexie.Table<JumpLink, string>;
-	marketItems!: Dexie.Table<DBMarketItem, number>;
+	marketItems!: Dexie.Table<UiMarketItem, number>;
 	shipyards!: Dexie.Table<Shipyard, string>;
 	jumpgates!: Dexie.Table<JumpGate, string>;
 	agents!: Dexie.Table<AgentInfo, number>;
 	dbinfo!: Dexie.Table<DbInfo, number>;
+	logs!: Dexie.Table<LogMessage, number>;
 
 	constructor() {
 		this.initDatabase();
@@ -35,11 +37,12 @@ export class DBService {
 			waypoints: 'symbol,systemSymbol',
 			agent: 'symbol',
 			jumplinks: 'fromSymbol',
-			marketItems: '++id',
+			marketItems: '[marketSymbol+symbol+tradeVolume+activity+supply+purchasePrice+sellPrice+type]',
 			shipyards: 'symbol',
 			jumpgates: 'symbol',
 			agents: '++id',
 			dbinfo: 'id',
+			logs: '++id',
 		});
 		
 		// Open the database and perform further actions when it's ready
@@ -56,6 +59,7 @@ export class DBService {
 		this.jumpgates = this.db.table('jumpgates');
 		this.agents = this.db.table('agents');
 		this.dbinfo = this.db.table('dbinfo');
+		this.logs = this.db.table('logs');
 
 		// Try to get the DbInfo entry
 		this.dbinfo.toArray().then(
@@ -87,6 +91,7 @@ export class DBService {
 		this.jumpgates.clear();
 		this.agents.clear();
 		this.dbinfo.clear();
+		this.logs.clear();
 	}
 	deleteDatabase() {
 		// Open the database (this is needed to delete it)
@@ -106,7 +111,6 @@ export class DBService {
 	createWaypoint(waypoint: Waypoint) {
 		this.waypoints.put(waypoint, waypoint.symbol)
 			.then(() => {
-				console.log(`updated waypoint: ${waypoint}`);
 			})
 			.catch((error) => {
 				console.error('Error updating waypoint:', error);
@@ -159,45 +163,55 @@ export class DBService {
 
 	addMarketItems(marketItems: UiMarketItem[]) {
 		for (const marketItem of marketItems) {
-			// Define a unique key for the market item (excluding the timestamp)
-			const key = {
-				symbol: marketItem.symbol,
-				tradeVolume: marketItem.tradeVolume,
-				supply: marketItem.supply,
-				purchasePrice: marketItem.purchasePrice,
-				sellPrice: marketItem.sellPrice,
-				marketSymbol: marketItem.marketSymbol,
-				type: marketItem.type,
-			};
+			this.addMarketItem(marketItem);
+		}
+	}
+	async addMarketItem(item: UiMarketItem): Promise<void> {
+		const existingItem = await this.marketItems
+			.where({
+				symbol: item.symbol,
+				type: item.type,
+				marketSymbol: item.marketSymbol,
+				tradeVolume: item.tradeVolume,
+				activity: item.activity,
+				supply: item.supply,
+				purchasePrice: item.purchasePrice,
+				sellPrice: item.sellPrice,
+			})
+			.first();
 
-			// Check if an item with the same properties (excluding timestamp) exists
-			this.marketItems.get(key)
-				.then((existingItem) => {
-					if (existingItem) {
-						// An item with the same properties exists; update its timestamp
-						existingItem.timestamp = marketItem.timestamp;
-						return this.marketItems.update(existingItem.id, existingItem);
-					}
-					const dbItem = new DBMarketItem(marketItem.marketSymbol, marketItem.symbol, marketItem.type, marketItem);
-					dbItem.timestamp = marketItem.timestamp;
-					// No item with the same properties found; add a new item
-					return this.marketItems.add(dbItem);
-				})
-				.then(() => {
-					console.log(`Added/Updated marketItem: ${marketItem.marketSymbol}: ${marketItem.supply}, ${marketItem.purchasePrice}, ${marketItem.sellPrice}, ${marketItem.timestamp.toLocaleTimeString()}`);
-				})
-				.catch((error) => {
-					console.error('Error updating market:', error);
-				});
+		if (existingItem) {
+			// Item with the same properties exists, update timestamp
+			existingItem.timestamp = item.timestamp;
+			await this.marketItems.put(existingItem);
+		} else {
+			// No matching item found, add a new one
+			await this.marketItems.add(item);
 		}
 	}
 	addShipyard(shipyard: Shipyard) {
 		this.shipyards.put(shipyard, shipyard.symbol)
 			.then(() => {
-				console.log(`updated shipyard: ${shipyard}`);
+				console.log(`updated shipyard: ${shipyard.symbol}`);
 			})
 			.catch((error) => {
 				console.error('Error updating shipyard:', error);
+			});
+	}
+	nextLogMessage = -1;
+	addLogMessage(message: LogMessage) {
+		if (this.nextLogMessage == -1) {
+			if (this.logs) {
+				this.logs.count().then((count)=> {this.nextLogMessage = count; this.addLogMessage(message);});
+			}
+			return;
+		}
+		message.id = this.nextLogMessage++;
+		this.logs.add(message)
+			.then(() => {
+			})
+			.catch((error) => {
+				console.error('Error adding log message:', error);
 			});
 	}
 	addJumpgate(jumpgate: JumpGate, symbol: string) {
@@ -221,9 +235,9 @@ export class DBService {
 	setGalaxyPagesLoaded(pages: number) {
 		this.dbinfo.clear();
 		this.dbInfo.galaxyPagesLoaded = pages;
+		this.dbInfo.id = 0;
 		this.dbinfo.put(this.dbInfo, 0)
 			.then(() => {
-				console.log(`updated DbInfo: ${this.dbInfo}`);
 			})
 			.catch((error) => {
 				console.error('Error updating DbInfo:', error);
@@ -247,6 +261,7 @@ export class AgentInfo {
 	agentRole = '';	
 }
 export class DbInfo {
+	id = 0;
 	galaxyPagesLoaded = 0;
 }
 export class DBMarketItem extends UiMarketItem {

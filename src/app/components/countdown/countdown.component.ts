@@ -72,7 +72,6 @@ export class CountdownComponent implements OnInit, OnChanges {
       if (change.currentValue && change.currentValue.remainingSeconds !== change.previousValue?.remainingSeconds) {
         // Handle the change in remainingSeconds here
         const newRemainingSeconds = change.currentValue.remainingSeconds;
-        console.log(`Remaining Seconds changed to: ${newRemainingSeconds}`);
       }
     }
   }

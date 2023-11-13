@@ -27,7 +27,7 @@ export class ContractsComponent {
 	}
 	
 	update() {
-		this.contractService.updateContracts();
+		this.contractService.getAllContracts();
 	}
 	
 	selectContract(contract: Contract) {

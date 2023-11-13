@@ -8,9 +8,10 @@
 				<table>
 					<tr>
 						<th>Name</th>
-						<th>Type</th>
+						<th></th>
+						<th></th>
+						<th></th>
 						<th>Trade<br/>Volume</th>
-						<th>Supply</th>
 						<th>Purchase<br/>Price</th>
 						<th>Sell<br/>Price</th>
 						<th>Timestamp</th>
@@ -18,10 +19,11 @@
 					<tr *ngFor="let tradeGood of goods"
 					    [ngClass]="{ 'selected-row': tradeGood == selectedTradeItem }"
 						(click)="selectTradeItem(tradeGood)">
-						<td title="{{tradeGood.description}}">{{tradeGood.name}}</td>
-						<td class="centered">{{tradeGood.type}}</td>
+						<td title="{{tradeGood.description}}"><img [attr.src]="'assets/icons/GOOD_'+tradeGood.name+'.png'"/>{{tradeGood.name}}</td>
+						<td title="{{tradeGood.type}}">       <img [attr.src]="'assets/icons/'+tradeGood.type+'.png'"/></td>
+						<td title="{{tradeGood.activity}}">   <img [attr.src]="'assets/icons/'+tradeGood.activity+'.png'" *ngIf="tradeGood.activity"/></td>
+						<td title="{{tradeGood.supply}}">     <img [attr.src]="'assets/icons/'+tradeGood.supply+'.png'"   *ngIf="tradeGood.purchasePrice"/>{{tradeGood.purchasePrice == 0 ? '???' : ''}}</td>
 						<td class="numeric">{{tradeGood.purchasePrice == 0 ? '???' : tradeGood.tradeVolume}}</td>
-						<td class="centered">{{tradeGood.purchasePrice == 0 ? '???' : tradeGood.supply}}</td>
 						<td class="numeric">{{tradeGood.purchasePrice == 0 ? '???' : (tradeGood.purchasePrice | currency : 'USD' : 'symbol' : '1.0-0')}}</td>
 						<td class="numeric">{{tradeGood.purchasePrice == 0 ? '???' : (tradeGood.sellPrice | currency : 'USD' : 'symbol' : '1.0-0')}}</td>
 						<td>{{formatDate(tradeGood.timestamp)}}</td>
@@ -33,7 +35,7 @@
 				</div>
 			</div>
 			<div *ngIf="selectedTradeItem && xScale">
-				<h3>Historical Prices for {{selectedTradeItem.symbol}}</h3>
+				<h3>Historical Prices for {{selectedTradeItem.symbol}} at {{waypoint.symbol}}</h3>
 				<svg id="chart" width="450" height="200" xmlns="http://www.w3.org/2000/svg">
 					<rect x="0" y="0" width="400" height="200" fill="black"></rect>
 					<g *ngFor="let x of [0, 100, 200, 300, 400]">
@@ -47,10 +49,14 @@
 						<circle r="2" fill="blue"  
 						    [attr.cx]="getXCoordinate(item.timestamp)"
 							[attr.cy]="getYCoordinate(item.purchasePrice)">
+							<title>Purchase price: {{item.purchasePrice}}
+Date: {{formatDate(item.timestamp)}}</title>
 						</circle>
 						<circle r="2" fill="red"
 						    [attr.cx]="getXCoordinate(item.timestamp)"
 							[attr.cy]="getYCoordinate(item.sellPrice)">
+							<title>Sell price: {{item.sellPrice}}
+Date: {{formatDate(item.timestamp)}}</title>
 						</circle>
 						<line *ngIf="i>0"
 							[attr.x1]="getXCoordinate(itemHistory[i].timestamp)"
@@ -110,8 +116,8 @@
 						<span *ngIf="sortKey === 'timestamp' && sortDirection === -1">▼</span>
 					</th>
 				</tr>
-				<tr *ngFor="let item of itemAtOtherMarkets | sort:sortKey:sortDirection">
-					<td>{{item.marketSymbol}}</td>
+				<tr *ngFor="let item of itemAtOtherMarkets | sort:sortKey:sortDirection" [attr.class]="item.marketSymbol == waypoint.symbol ? 'currentMarket' : ''">
+					<td (click)="onMarketClick(item.marketSymbol)" class="link">{{item.marketSymbol}}</td>
 					<td>{{item.distance}}</td>
 					<td>{{item.purchasePrice}}</td>
 					<td>{{item.sellPrice}}</td>
@@ -122,43 +128,5 @@
 			</table>
 		</div>
 	</div>
-	
-	<div>
-		Credits: {{account?.credits | currency : 'USD' : 'symbol' : '1.0-0'}}<br/>
-		Ships At Waypoint:
-		<table *ngFor="let ship of shipsAtWaypoint"
-			[ngClass]="{ 'selected-ship': ship == selectedShip }"
-			(click)="onSelectShip(ship)">
-			<tr>
-				<th>{{ship.symbol}}</th>
-				<td>
-					<app-countdown [title]="'Cooldown'" *ngIf="ship.cooldown" [cooldown]="ship.cooldown"></app-countdown>
-				</td>
-				<td>
-					<button *ngIf="ship.nav.status != 'DOCKED'"
-					       (click)="onDockShip(ship)">Dock</button>
-				</td>
-			</tr>
-			<tr>
-				<th>Name</th>
-				<th>Units</th>
-			</tr>
-			<tr *ngFor="let cargoItem of ship!.cargo.inventory"
-			    [ngClass]="{ 'selected-cargo': cargoItem == selectedCargoItem }"
-			    (click)="selectCargoItem(cargoItem)">
-				<td title="{{cargoItem.description}}">{{ cargoItem.name}}</td>
-				<td>{{cargoItem.units}}</td>
-				<td><button (click)="onSellAll(cargoItem)">Sell All</button></td>
-				<td><button (click)="onJettisonCargoItem(cargoItem)">Jettison</button></td>
-			</tr>
-			<tr>
-				<td>Empty spaces</td>
-				<td><b>{{ship.cargo.capacity - ship.cargo.units}}</b></td>
-			</tr>
-		</table>
-		<div *ngIf="selectedCargoItem != null">
-			<button (click)="onSellCargoItem()">Sell</button>
-			Qty:<input type="number" [(ngModel)]="sellTradeQty">
-		</div>
-	</div>
+	<app-shiplist showSell="true"></app-shiplist>
 </div>

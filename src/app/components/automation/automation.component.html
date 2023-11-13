@@ -31,4 +31,12 @@
 			</td>
 		</tr>
 	</table>
+	<table>
+		<tr>
+			<td *ngFor="let allowShip of allowShips; let index=index" class="allow_ship">
+				<input [attr.id]="'ship'+index" type="checkbox" [(ngModel)]="allowShip.value" (change)="onAllowShipsChanged()">
+				<label [attr.for]="'ship'+index"> {{allowShip.shipSymbol.toLowerCase()}}</label>
+			</td>
+		</tr>
+	</table>
 </div>

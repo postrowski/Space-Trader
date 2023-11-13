@@ -23,7 +23,8 @@ import { LocXY } from 'src/models/LocXY';
 import { LogMessage } from '../utils/log-message';
 import { ConstructionSite } from 'src/models/ConstructionSite';
 import { ConstructionService } from './construction.service';
-import { WeekDay } from '@angular/common';
+import { MarketManager } from '../utils/market-manager';
+import { TradeManager } from '../utils/trade-manager';
 
 @Injectable({
 	providedIn: 'root'
@@ -43,12 +44,14 @@ export class AutomationService {
 	constructionSite: ConstructionSite | null = null;
 	systemsBySymbol = new Map<string, System | null>();
 	shipOperationBySymbol: Map<string, ExecutionStep> = new Map();
-	timeToSupplyConstruction = 0;
 
 	refreshAgent = false;
 	refreshShips = '';
 	refreshWaypoints = '';
 	refreshMarkets: string[] = [];
+	marketManager: MarketManager | null = null;
+	tradeManager: TradeManager | null = null;
+	managers: any[] = [];
 	
 	constructor(public fleetService: FleetService,
 		        public galaxyService: GalaxyService,
@@ -62,6 +65,10 @@ export class AutomationService {
 		        public explorationService: ExplorationService,
 		        public dbService: DBService) {
 		this.addMessage(null, "starting...");
+		this.marketManager = new MarketManager(this);
+		this.tradeManager = new TradeManager(this);
+		this.managers.push(this.marketManager);
+		this.managers.push(this.tradeManager);
 		this.fleetService.allShips$.subscribe((ships) => {
 			for (let ship of ships) {
 				let found = false;
@@ -79,16 +86,10 @@ export class AutomationService {
 		});
 		
 		this.contractService.acceptedContract$.subscribe((contract) => {
-			if (contract) {
-				console.log(`contractService.acceptedContract - id: ${contract.id}, ac: ${contract.accepted}, ff:${contract.fulfilled}`);
-			} else {
-				console.log(`contractService.acceptedContract - null`);
-			}
 			this.contract = contract;
 		});
 		this.constructionService.constructionSiteSubject.subscribe((constructionSite) => {
 			this.constructionSite = constructionSite;
-			this.timeToSupplyConstruction = Date.now() + 1000 * 60 * 1; // once per minute we can construct the jumpgate.
 		});
 		this.accountService.agent$.subscribe((agent) => {
 			this.agent = agent;
@@ -103,9 +104,9 @@ export class AutomationService {
 		logMessage.timestamp  = new Date();
 		logMessage.credits = this.agent?.credits || 0;
 		this.messageSubject.next(logMessage);
+		this.dbService.addLogMessage(logMessage);
 		
 		message = `${ship?.symbol}: ${new Date().toLocaleTimeString()} - ${message}`;
-		console.log(message);
 	}
 	
 	onError(error: any, step: ExecutionStep) {
@@ -174,11 +175,22 @@ export class AutomationService {
 		this.prepare();
 		this.step();
 	}
+	
+	activeShips: string[] = [];
+	setActiveShips(activeShips: { shipSymbol: string, value: boolean }[]) {
+		this.activeShips = [];
+		for (const activeShip of activeShips) {
+			if (activeShip.value) {
+				this.activeShips.push(activeShip.shipSymbol);
+			}
+		}
+	}
+
 	prepare() {
 		stop();
 		this.shipOperationBySymbol.clear();
 		if (this.contract == null) {
-			this.contractService.updateContracts();
+			this.contractService.getAllContracts();
 		}
 		this.errorCount = 0;
 	}
@@ -227,10 +239,13 @@ export class AutomationService {
 			}
 			
 			const botsByWaypointSymbol = new Map<string, Bot[]>();
-			const haulerBots: Bot[] = [];
 			for (const bot of this.shipBots) {
-				if (bot.role == Role.Hauler) {
-					haulerBots.push(bot);
+				if (bot.manager == null) {
+					if (bot.role == Role.Explorer && this.marketManager) {
+						this.marketManager.addBot(bot);
+					} else if (this.tradeManager) {
+						this.tradeManager.addBot(bot);
+					}
 				}
 				if (bot.ship.nav.status != 'IN_TRANSIT') {
 					const waypointSymbol = bot.ship.nav.waypointSymbol;
@@ -240,35 +255,13 @@ export class AutomationService {
 					botsByWaypointSymbol.get(waypointSymbol)!.push(bot);
 				}
 			}
-			let contractBot = null;
-			let constructionBot = null;
 			const credits = this.agent?.credits || 0;
-			if (credits > 500_000) {
-				if (haulerBots.length > 2) {
-					contractBot = haulerBots[2];
-				}
-				if (credits > 1_000_000) {
-					if (haulerBots.length > 1) {
-						constructionBot = haulerBots[1];
-					}
-				}
-			}
 			
-			for (const bot of this.shipBots) {
-				if (bot.ship.nav.status === 'IN_TRANSIT') {
-					continue;
-				}
-				const currentOperation = this.shipOperationBySymbol.get(bot.ship.symbol);
-				if (currentOperation || bot.currentStep) {
-					continue;
-				}
-				// Lets negatiate contracts first:
-				if (!this.contract) {
-					bot.negotiateContract();
-				}
-				
-				const waypointSymbol = bot.ship.nav.waypointSymbol;
-				const systemSymbol = GalaxyService.getSystemSymbolFromWaypointSymbol(waypointSymbol);
+			const systemSymbols = this.shipBots.map(bot => bot.ship?.nav?.waypointSymbol)
+			                                   .filter(Boolean)
+			                                   .map((waypointSymbol) => GalaxyService.getSystemSymbolFromWaypointSymbol(waypointSymbol));
+			const uniqueSystemSymbols = [...new Set(systemSymbols)]
+			for (const systemSymbol of uniqueSystemSymbols) {
 				const system = this.systemsBySymbol.get(systemSymbol);
 				if (!system) {
 					this.systemsBySymbol.set(systemSymbol, null);
@@ -277,298 +270,13 @@ export class AutomationService {
 							this.systemsBySymbol.set(sys.symbol, sys);
 						}
 					});
-					this.addMessage(bot.ship, `waiting for DB to get system ${systemSymbol}`);
-					continue; // don't proceed until we get that system back from the DB
+					// don't proceed until we get that system back from the DB
+					throw `waiting for DB to get system ${systemSymbol}`;
 				}
-				const waypoint = system.waypoints?.find((waypoint) => waypoint.symbol === waypointSymbol) || null;
-				if (!waypoint) {
-					this.addMessage(bot.ship, `Can't find waypoint ${bot.ship.nav.waypointSymbol}`);
-					continue;
-				}
-				// Jump gates don't typically have traits, so we don't use the loadWaypoints when a jumpgate
-				// doesn't have traits. The 'loadWaypoints' will load all the waypoints for the entire system
-				// though, so this will still load the jumpgate's traits when another waypoint has not traits.
-				if (!waypoint.traits && (waypoint.type !== 'JUMP_GATE')) {
-					this.loadWaypoints(system);
-				}
-				const isJumpgate     = WaypointBase.isJumpGate(waypoint);
-				const hasShipyard    = WaypointBase.hasShipyard(waypoint);
-				const hasUncharted   = WaypointBase.hasUncharted(waypoint);
-				const isDebrisField  = WaypointBase.isDebrisField(waypoint);
-				const hasMarketplace = WaypointBase.hasMarketplace(waypoint);
-				const isAsteroid     = WaypointBase.isAsteroid(waypoint);
-				const isGasGiant     = WaypointBase.isGasGiant(waypoint);
-				let hasPriceData = hasMarketplace ? this.marketService.hasPriceData(waypoint.symbol) : false;
-				let shipyard = hasShipyard ? this.shipyardService.getCachedShipyard(waypoint.symbol, false) : null;
-				let jumpgate = isJumpgate ? this.jumpgateService.getJumpgateBySymbol(waypoint.symbol) : null;
-				const marketDataAge = hasPriceData ? this.marketService.lastUpdateDate(waypoint.symbol) : null;
-				
-				// Update our local information, if needed
-				if (hasUncharted) {
-					bot.chart(waypoint);
-				}
-				const tooOld = Date.now() - 1000 * 60 * 30; // 30 minutes ago 
-				if (hasMarketplace && !hasPriceData) {
-					// If this waypoint has a marketplace, but we dont have real price data:
-					this.getMarket(waypoint, true);
-				} else if (hasMarketplace && 
-				           (marketDataAge != null && 
-				            (marketDataAge.getTime() < tooOld))) {
-					// If this waypoint has a marketplace, but the price data is too old
-					this.getMarketplaceForced(waypoint);
-				}
-				if (hasShipyard && (shipyard == null)) {
-					// If this waypoint has a shipyard, but our cache is too old,
-					// update the cached shipyard:
-					this.getShipyard(waypoint, true);
-				}
-				if (isJumpgate && (jumpgate == null)) {
-					// If this waypoint is a jumpgate, but not in our records:
-					this.jumpgateService.getJumpgate(waypoint.symbol, true);
-				}
+			}
 
-
-				const waypointsToExplore = this.explorationService.getWaypointsNeedingToBeExplored(system) || [];
-				if (hasMarketplace) {
-					// When we are exploring, always keep as full a fuel tank as possible,
-					// otherwise keep 40% in the tank
-					let minPercent = waypointsToExplore.length > 0 ? 95 : 40;
-					bot.refuel(minPercent);
-				}
-				
-				const firstFastestBot = this.findFirstFastestShipInSystem(waypoint.symbol);
-				const isFirstFastestBot = firstFastestBot == bot;
-				if (waypointsToExplore && isFirstFastestBot && waypointsToExplore.length > 0) {
-					// Navigate to the next waypoint that needs to be explored:
-					bot.traverseWaypoints(waypointsToExplore, waypoint, "exploring");
-				}
-
-				// Make sure we have at least some price data from evey single market and shipyard in this system.
-				// If we are a ship at one of these locations, visit that market/shipyard.
-				let marketsToVisit: WaypointBase[] = [];
-				for (let sysWaypoint of system?.waypoints || []) {
-					if (sysWaypoint.symbol == bot.ship.nav.waypointSymbol) {
-						// We've already checked the market and shipyard prices for our current location
-						continue;
-					}
-					const sysWaypointHasMarket = WaypointBase.hasMarketplace(sysWaypoint);
-					const sysWaypointHasShipyard = WaypointBase.hasShipyard(sysWaypoint);
-					if (sysWaypointHasMarket || sysWaypointHasShipyard) {
-						let sysMarket = sysWaypointHasMarket ? this.marketService.hasPriceData(sysWaypoint.symbol) : false;
-						let sysShipyard = sysWaypointHasShipyard ? this.shipyardService.getCachedShipyard(sysWaypoint.symbol, false) : null;
-						const missingMarket = sysWaypointHasMarket && !sysMarket;
-						const missingShipyard = sysWaypointHasShipyard && (sysShipyard == null);
-						if (missingMarket || missingShipyard) {
-							marketsToVisit.push(sysWaypoint);
-						}
-					}
-				}
-				// avoid sending two ships to the same location:
-				const visitingDestinations = new Set(this.shipBots.map((otherBot) => otherBot.ship.nav.route.destination.symbol));
-				marketsToVisit = marketsToVisit.filter((way) => !visitingDestinations.has(way.symbol));
-				if (marketsToVisit.length > 0) {
-					bot.traverseWaypoints(marketsToVisit, waypoint, "exploring markets");
-				}
-
-				const neededUpgrade = bot.getNeededUpgrade();
-				let waypointDest: string | null = null;
-				let waypointDestPurpose: string | null = null;
-				if (neededUpgrade) {
-					const hasItem = bot.ship.cargo.inventory.some(inv => inv.symbol === neededUpgrade);
-					if (!hasItem) {
-						const marketItem: UiMarketItem | null = this.marketService.findCheapestMarketItemForSaleInSystem(waypoint, neededUpgrade, 1);
-						if (marketItem) {
-							if (credits > marketItem.purchasePrice) {
-								waypointDestPurpose = `going to market ${waypointDest} to buy upgrade ${neededUpgrade}`;
-								waypointDest = marketItem.marketSymbol;
-							}
-						}
-					} else {
-						const shipyard = this.shipyardService.findNearestShipyard(waypoint);
-						if (shipyard) {
-							waypointDestPurpose = `going to shipyard ${shipyard.symbol} to install upgrade ${neededUpgrade}`;
-							waypointDest = shipyard.symbol;
-						}
-					}
-				}
-				/*if (isFirstFastestBot && !waypointDest && credits > 170_000) {
-					const shipyard = this.shipyardService.findNearestShipyard(waypoint);
-					if (shipyard) {
-						const houndShips = shipyard.ships.filter(ship => ship.name.toLowerCase().includes('hound'));
-						if (houndShips && (houndShips.length > 0) && 
-							credits > houndShips[0].purchasePrice) {
-							let botsAtYard = botsByWaypointSymbol.get(shipyard.symbol);
-							if (!botsAtYard) {
-								this.addMessage(bot.ship, 'going to shipyard to buy ship');
-								waypointDest = shipyard.symbol;
-							}
-						}
-					} else {
-						if (system.waypoints && System.hasShipyard(system)) {
-							const shipyardWaypoints: WaypointBase[] = system.waypoints.filter((waypoint) => {
-								return WaypointBase.hasShipyard(waypoint);
-							});
-							if (shipyardWaypoints?.length) {
-								let botsAtYard = botsByWaypointSymbol.get(shipyardWaypoints[0].symbol);
-								if (!botsAtYard) {
-									this.addMessage(bot.ship, 'going to shipyard to look at ship');
-									waypointDest = shipyardWaypoints[0].symbol;
-								}
-							}
-						}
-					}
-				}*/
-				const otherShipsAtWaypoint = this.shipBots.filter((otherBot) => {
-					return (bot.ship.symbol != otherBot.ship.symbol) && 
-							(otherBot.ship.nav.status !== 'IN_TRANSIT') && 
-							(bot.ship.nav.waypointSymbol == otherBot.ship.nav.waypointSymbol);
-				});
-				if (this.contract || this.constructionSite) {
-					// If this is a drone or a probe, it doesn't make sense to have it making contract/construction runs.
-					if (bot.ship.cargo.capacity > 20 && (bot == contractBot || bot == constructionBot)) {
-						bot.deliverAll(this.contract, this.constructionSite);
-					}
-				}
-				let contractAllowed = (bot == contractBot) && (credits > 500_000);
-				let constructionAllowed = (bot == constructionBot) && (credits > 1_000_000);
-				if (!waypointDest && (bot == contractBot || bot == constructionBot)) {
-					bot.sellAtBestLocation(waypoint, contractAllowed ? this.contract : null,
-					                       constructionAllowed ? this.constructionSite : null, otherShipsAtWaypoint);
-					waypointDestPurpose = `going to market ${waypointDest} to buy contract/construction goods`;
-					waypointDest = this.buyContractAndConstructionGoods(bot, waypoint, contractAllowed, constructionAllowed);
-				}
-				if (waypointDest && waypointDestPurpose) {
-					const systemSymbol = GalaxyService.getSystemSymbolFromWaypointSymbol(waypointDest);
-					const system = this.systemsBySymbol.get(systemSymbol);
-					if (system?.waypoints) {
-						const waypoint = system.waypoints.find(waypoint => waypoint.symbol === waypointDest);
-						if (waypoint) {
-							bot.navigateTo(waypoint, null, waypointDestPurpose);
-						}
-					}
-				}
-
-				if (bot.role == Role.Refinery) {
-					bot.gatherOre(this.shipBots);
-					bot.refineAll();
-				} else if (bot.role == Role.Explorer) {
-					bot.exploreSystems(waypoint);
-				} else if (bot.role != Role.Miner &&
-						   bot.role != Role.Siphon) {
-						   //(bot !== contractBot || !contractAllowed) &&
-						   //(bot !== constructionBot || !constructionAllowed)
-					let res;
-					let tries = 0;
-					let travelSpeed = 'CRUISE';
-					do 	{
-						res = bot.trade(waypoint, this.contract, this.constructionSite, credits,
-						                travelSpeed, this.shipBots, otherShipsAtWaypoint);
-						if (res == 'fail' && travelSpeed == 'CRUISE') {
-							res = 'retry';
-							travelSpeed = 'DRIFT';
-						}
-					} while (res == 'retry' && (tries++ < 10));
-	                if (res == 'wait') {
-						continue;
-					}
-				}
-
-				if (bot.ship.nav.status === 'DOCKED' && hasMarketplace) {
-					// If we are already docked at a marketplace, sell everything we've got:
-					bot.sellAll(waypoint, this.contract, this.constructionSite, otherShipsAtWaypoint);
-				}
-
-				let roomToMine = bot.ship.cargo.units < bot.ship.cargo.capacity;
-				/*if (roomToMine) {
-					let botsAtWaypoint = botsByWaypointSymbol.get(waypoint.symbol);
-					roomToMine = bot.ship.cargo.units < bot.ship.cargo.capacity/2;
-				}*/
-				if (isAsteroid || isDebrisField) {
-					let surveys = this.surveyService.getSurveysForWaypoint(waypoint);
-					let bestSurvey = this.getBestSurveyToUse(waypoint, surveys);
-					if (surveys.length < 5) {
-						bot.survey();
-					}
-					// If our cargo hold is below half capacity, we should be able
-					// to get another load:
-					if (roomToMine) {
-						bot.mine(bestSurvey);
-					}
-				}
-				if (isGasGiant && roomToMine) {
-					bot.siphon();
-				}
-				if (hasMarketplace) {
-					bot.sellAll(waypoint, this.contract, this.constructionSite, otherShipsAtWaypoint);
-					if (neededUpgrade) {
-						this.addMessage(bot.ship, `buying upgrade item ${neededUpgrade}`);
-						bot.buyItems(neededUpgrade, 1);
-					}
-				}
-				if (hasShipyard) {
-					bot.upgradeShip(waypoint);
-					this.buyShips(waypoint);
-				}
-				if (bot.ship.cargo.capacity - bot.ship.cargo.units < 10) {
-					// If we have less than 10 spaces for stuff, get rid of stuff we can't sell for a profit.
-					bot.consolidateCargo(otherShipsAtWaypoint);
-					bot.jettisonUnsellableCargo(waypoint, this.contract, this.constructionSite);
-				}
-				
-				if (roomToMine) {
-					if (!isAsteroid && !isDebrisField && Ship.containsMount(bot.ship, 'MOUNT_MINING_LASER')) {
-						const asteroids = system.waypoints?.filter((way) => WaypointBase.isAsteroid(way) && way != waypoint) || [];
-						if (asteroids.length > 0) {
-							const nearbyWaypoints = ExplorationService.sortWaypointsByDistanceFrom(asteroids, waypoint);
-							bot.navigateTo(nearbyWaypoints[0], null, `going to asteroid ${nearbyWaypoints[0].symbol} to mine.`);
-						}
-					} else if (Ship.containsMount(bot.ship, 'MOUNT_GAS_SIPHON')) {
-						if (!isGasGiant) {
-							const gasGiants = system.waypoints?.filter((way) => WaypointBase.isGasGiant(way) && way != waypoint) || [];
-							if (gasGiants.length > 0) {
-								const nearbyWaypoints = ExplorationService.sortWaypointsByDistanceFrom(gasGiants, waypoint);
-								bot.navigateTo(nearbyWaypoints[0], null, 'going to gas giant to siphon.');
-							}
-						}
-					} else {
-						// we aren't doing anything else, check if we should contribute to the contract or construction site
-						waypointDest = this.buyContractAndConstructionGoods(bot, waypoint, contractAllowed, constructionAllowed);
-						if (waypointDest) {
-							const systemSymbol = GalaxyService.getSystemSymbolFromWaypointSymbol(waypointDest);
-							const system = this.systemsBySymbol.get(systemSymbol);
-							if (system?.waypoints) {
-								const waypoint = system.waypoints.find(waypoint => waypoint.symbol === waypointDest);
-								if (waypoint) {
-									bot.navigateTo(waypoint, null, `going to market ${waypointDest} to buy contract/construction goods`);
-								}
-							}
-						}
-					}
-				} else if (bot.ship.cargo.units > 0) {
-				
-					let inventory = [...bot.ship.cargo.inventory];
-					inventory = inventory.filter((inv) => !inv.symbol.startsWith("MODULE") &&
-														  !inv.symbol.startsWith("MOUNT") &&
-														  !inv.symbol.includes("ANTIMATTER"));
-					inventory.sort((i1, i2) => {
-						if (i1.units < i2.units) return -1;
-						if (i1.units > i2.units) return 1;
-						return 0;
-					});
-					for (const inv of inventory) {
-						const sellItem = this.marketService.findHighestPricedMarketItemForSaleInSystem(waypoint, inv.symbol, inv.units);
-						if (sellItem) {
-							if (sellItem.marketSymbol == waypoint.symbol) {
-								bot.sellCargo(sellItem.symbol, inv.units);
-							} else {
-								const market = this.galaxyService.getWaypointByWaypointSymbol(sellItem.marketSymbol);
-								if (market) {
-									bot.navigateTo(market, null, `Navigating to ${sellItem.marketSymbol} to sell ${sellItem.marketSymbol}`);
-								}
-							}
-						}
-					}
-				}
+			for (const manager of this.managers) {
+				manager.step(this.systemsBySymbol, this.shipOperationBySymbol, this.activeShips, credits);
 			}
 			this.galaxyService.getNextPageOfWaypoints();
 		} catch (error) {
@@ -603,88 +311,6 @@ export class AutomationService {
 	}
 	executionTimes: number[] = [];
 	
-	buyContractAndConstructionGoods(bot: Bot, waypoint: WaypointBase, contractAllowed: boolean, constructionAllowed: boolean): string | null {
-		if (bot.ship.cargo.capacity < 25) {
-			// If we don't have much space for cargo, don't be a part of the contract/construction crew
-			return null;
-		}
-		let itemFor = '';
-		let itemsToBuy: {symbol: string, units: number, itemFor: string, deliverTo: string}[] = [];
-		if (this.constructionSite && constructionAllowed && this.timeToSupplyConstruction < Date.now()) {
-			for (const material of this.constructionSite.materials) {
-				itemsToBuy.push({
-					symbol: material.tradeSymbol,
-					units: material.required - material.fulfilled,
-					itemFor: 'construction Site',
-					deliverTo: this.constructionSite.symbol
-				});
-			}
-		}
-		if (this.contract && contractAllowed) {
-			for (const goods of this.contract.terms.deliver) {
-				itemsToBuy.push({
-					symbol: goods.tradeSymbol,
-					units: goods.unitsRequired - goods.unitsFulfilled,
-				 	itemFor: 'contract',
-					deliverTo: goods.destinationSymbol
-				});
-			}
-		}
-		for (const itemToBuy of itemsToBuy) {
-			const lowPrice = this.marketService.getItemHistoricalLowPriceAtMarket(waypoint.symbol, itemToBuy.symbol);
-			const currentPrices: Map<string, UiMarketItem> = this.marketService.getPricesForItemInSystemByWaypointSymbol(waypoint.symbol, itemToBuy.symbol);
-			let minPrice = Infinity;
-			for (let item of currentPrices.values()) {
-				if (item.purchasePrice < minPrice) {
-					minPrice = item.purchasePrice;
-				}
-			}
-			let tooExpensive = (minPrice > lowPrice* 2);
-			if (tooExpensive || ((this.agent?.credits || 0) > minPrice)) {
-				continue;
-			}
-			
-			if (itemToBuy.units > 0) {
-				for (let inv of bot.ship.cargo.inventory) {
-					if (itemToBuy.symbol == inv.symbol) {
-						itemToBuy.units -= inv.units;
-						break;
-					}
-				}
-				if (itemToBuy.units <= 0) {
-					// We have all the items we need, go deliver them now
-					this.addMessage(bot.ship, `going to ${itemToBuy.deliverTo} to deliver ${itemToBuy.itemFor} ${itemToBuy.symbol}`);
-					return itemToBuy.deliverTo;
-				}
-			}
-		}
-		let closestItem = null;
-		let closestDist = Infinity;
-		let closestMarket = null;
-		for (const itemToBuy of itemsToBuy) {
-			const marketItem: UiMarketItem | null = this.marketService.findCheapestMarketItemForSaleInSystem(waypoint, itemToBuy.symbol, itemToBuy.units);
-			if (marketItem) {
-				const supplierMarket = this.galaxyService.getWaypointByWaypointSymbol(marketItem.marketSymbol);
-				if (supplierMarket) {
-					const distForItem = LocXY.getDistance(waypoint, supplierMarket);
-					if (closestDist > distForItem) {
-						closestDist = distForItem;
-						closestItem = itemToBuy;
-						closestMarket = supplierMarket;
-					}
-				}
-			}
-		}
-		if (closestMarket && closestItem) {
-			if (waypoint.symbol != closestMarket.symbol) {
-				this.addMessage(bot.ship, `going to market ${closestMarket.symbol} to buy ${itemFor} item ${closestItem?.symbol}.`);
-				return closestMarket.symbol;
-			}
-			this.addMessage(bot.ship, `buying ${itemFor} item: ${closestItem.units} ${closestItem.symbol}.`);
-			bot.purchaseCargo(closestItem.symbol, closestItem.units);
-		}
-		return null;
-	}
 	
 	findFirstFastestShipInSystem(systemSymbol: string): Bot | null {
 		systemSymbol = GalaxyService.getSystemSymbolFromWaypointSymbol(systemSymbol);
@@ -797,7 +423,7 @@ export class AutomationService {
 	
 	acceptContract() {
 		if (!this.contract) {
-			for (let contract of this.contractService.getAllContracts()) {
+			for (let contract of this.contractService.getContracts()) {
 				if (contract.accepted === false && contract.id) {
 					const step = new ExecutionStep(null, `Accepting contract`);
 					this.contractService.acceptContract(contract.id)
@@ -811,22 +437,6 @@ export class AutomationService {
 			}
 		}
 	}
-	getMarket(waypoint: WaypointBase, shipsAtWaypoint: boolean) {
-		if (!WaypointBase.hasMarketplace(waypoint)) {
-			return;
-		}
-		if (!this.marketService.hasPriceData(waypoint.symbol)) {
-			const step = new ExecutionStep(null, `getting market ${waypoint.symbol}`);
-			this.marketService.getMarketplace(waypoint.symbol, shipsAtWaypoint)
-			                  .subscribe((response) => {
-				this.completeStep(step);
-			}, (error) => {
-				this.onError(error, step);
-			});
-			throw step;
-		}
-	}
-	
 	getMarketplaceForced(waypoint: WaypointBase) {
 		const step = new ExecutionStep(null, `getting market refresh ${waypoint.symbol}`);
 		this.marketService.getMarketplaceForced(waypoint.symbol)
@@ -943,50 +553,7 @@ export class AutomationService {
 			}
 		}
 	}
-
-	getBestSurveyToUse(waypoint: WaypointBase, surveys: Survey[]): Survey | undefined {
-		const surveyAverages: { [symbol: string]: number } = {};
-
-		// Calculate average price per unit for each survey
-		surveys.forEach((survey) => {
-			const sum = survey.deposits.reduce((total, deposit) => {
-				const nearestMarket = this.marketService.getNearestMarketInSystemThatTradesItem(waypoint, deposit.symbol);
-				if (!nearestMarket) return total;
-
-				const distance = LocXY.getDistance(nearestMarket, waypoint);
-				const fuelCost = distance * 2 / 20;
-				const marketItem = this.marketService.getItemAtMarket(nearestMarket.symbol, deposit.symbol);
-				if (!marketItem) return total;
-
-				let value = marketItem.sellPrice;
-				if (this.contract && ContractService.getContractDeliverable(deposit.symbol, this.contract)) {
-					// Favor surveys that lead to resources needed for a contract
-					return total + value * 2 - fuelCost;
-				}
-
-				return total + value - fuelCost;
-			}, 0);
-
-			const averagePrice = sum / survey.deposits.length;
-			surveyAverages[survey.symbol] = isNaN(averagePrice) ? 0 : averagePrice;
-		});
-
-		// Find the survey with the highest average price per unit
-		let highestAverageSurvey: Survey | undefined;
-		let highestAveragePrice = -Infinity;
-
-		for (const survey of surveys) {
-			const averagePrice = surveyAverages[survey.symbol];
-
-			if (averagePrice > highestAveragePrice) {
-				highestAverageSurvey = survey;
-				highestAveragePrice = averagePrice;
-			}
-		}
-
-		return highestAverageSurvey;
-	}
-
+	
 	waypointsLoading = new Set<string>();
 	loadWaypoints(system: System) {
 		if (!this.waypointsLoading.has(system.symbol)) {

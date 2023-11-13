@@ -1,4 +1,4 @@
-import { Component, EventEmitter, OnInit, Output } from '@angular/core';
+import { Component, EventEmitter, Input, OnInit, Output } from '@angular/core';
 import { CdkDragDrop } from '@angular/cdk/drag-drop';
 import { FleetService } from 'src/app/services/fleet.service';
 import { GalaxyService } from 'src/app/services/galaxy.service';
@@ -22,9 +22,9 @@ export class ShiplistComponent implements OnInit {
 	shipsAtWaypoint: Ship[] = [];
 	selectedShip: Ship | null = null;
 	selectedCargoItem: ShipCargoItem | null = null;
-	showMine = true;
-	showSurvey = true;
-	showSellAll = true;
+	@Input() showMine: string = 'false';
+	@Input() showSurvey: string = 'false';
+	@Input() showSell: string = 'false';
 	account: Agent | null = null;
 
 	@Output() onMineClicked: EventEmitter<Ship> = new EventEmitter<Ship>();
@@ -90,13 +90,16 @@ export class ShiplistComponent implements OnInit {
 	onDropSell(event: CdkDragDrop<string[]>) {
 		let cargoItem = event.item.data;
 		let sourceShipSymbol = this.getDragShipSymbol(event, true);
-		if (sourceShipSymbol && cargoItem) {
-			// TODO: how to limit the number of items being sold?
-			// for example, if the item has a trade limit on it.
-			this.marketService.sellCargo(sourceShipSymbol, cargoItem.symbol, cargoItem.units)
+		if (sourceShipSymbol && cargoItem && this.waypoint) {
+			let units = cargoItem.units;
+			// Limit the number of items being sold to the max for this market.
+			const marketItem = this.marketService.getItemAtMarket(this.waypoint.symbol, cargoItem.symbol);
+			if (marketItem && units > marketItem.tradeVolume) {
+				units = marketItem.tradeVolume;
+			}
+			this.marketService.sellCargo(sourceShipSymbol, cargoItem.symbol, units)
 			                  .subscribe((response) => {
 				}, (error) => {
-					
 				});
 		}
 	}

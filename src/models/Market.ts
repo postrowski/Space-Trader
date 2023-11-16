@@ -35,5 +35,6 @@ export enum Supply {
 	SCARCE,
 	LIMITED,
 	MODERATE,
+	HIGH,
 	ABUNDANT
 }

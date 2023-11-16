@@ -33,43 +33,10 @@
 					</tr>
 				</table>
 			</div>
-
-			<h2>Modificaiton Fee:</h2>
-			{{ shipyard.modificationsFee }}
-
+			Modificaiton Fee:{{ shipyard.modificationsFee | currency : 'USD' : 'symbol' : '1.0-0'}}
 		</div>
 	</div>
 	<div>
-		Credits: {{account?.credits | currency : 'USD' : 'symbol' : '1.0-0'}}<br/>
-		Ships At Waypoint:
-		<table *ngFor="let ship of shipsAtWaypoint">
-			<tr>
-				<th>{{ship.symbol}}</th>
-				<td>
-					<app-countdown [title]="'Cooldown'" *ngIf="ship.cooldown" [cooldown]="ship.cooldown"></app-countdown>
-				</td>
-				<td>
-					<button *ngIf="ship.nav.status != 'DOCKED'"
-					       (click)="onDockShip(ship)">Dock</button>
-				</td>
-			</tr>
-			<tr>
-				<th>Name</th>
-				<th>Units</th>
-			</tr>
-			<tr *ngFor="let cargoItem of ship!.cargo.inventory">
-				<td title="{{cargoItem.description}}">{{ cargoItem.name}}</td>
-				<td>{{cargoItem.units}}</td>
-				<td *ngIf="cargoItem.symbol.startsWith('MOUNT')"><button (click)="onInstallMount(ship, cargoItem)">Install</button></td>
-			</tr>
-			<tr *ngFor="let mount of ship!.mounts">
-				<td title="{{mount.description}}">{{ mount.name}}</td>
-				<td><button (click)="onRemoveMount(ship, mount)">Remove</button></td>
-			</tr>
-			<tr>
-				<td>Empty spaces</td>
-				<td><b>{{ship.cargo.capacity - ship.cargo.units}}</b></td>
-			</tr>
-		</table>
+		<app-shiplist showMount="true"></app-shiplist>
 	</div>
 </div>

@@ -1,11 +1,9 @@
-import { Component, Input, OnInit } from '@angular/core';
-import { CdkDragDrop, moveItemInArray } from '@angular/cdk/drag-drop';
+import { Component, OnInit } from '@angular/core';
 import { FleetService } from 'src/app/services/fleet.service';
 import { GalaxyService } from 'src/app/services/galaxy.service';
 import { Ship } from 'src/models/Ship';
-import { ShipCargoItem } from 'src/models/ShipCargoItem';
 import { Survey } from 'src/models/Survey';
-import { WaypointBase, WaypointTrait } from 'src/models/WaypointBase';
+import { WaypointBase } from 'src/models/WaypointBase';
 import { ModalService } from 'src/app/services/modal.service';
 import { SurveyService } from 'src/app/services/survey.service';
 

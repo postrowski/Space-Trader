@@ -216,6 +216,30 @@ export class MarketplaceComponent implements OnInit{
 		return 0;
 	}
 
+	getYCoordinateActivity(activity: string) {
+		if (activity == 'STRONG') return 3;
+		if (activity == 'GROWING') return 2;
+		if (activity == 'STATIC') return 1;
+		if (activity == 'WEAK') return 0;
+		return 0;
+	}
+	getYCoordinateSupply(supply: string) {
+		if (supply == 'ABUNDANT') return 4;
+		if (supply == 'HIGH') return 3;
+		if (supply == 'MODERATE') return 2;
+		if (supply == 'LIMITED') return 1;
+		if (supply == 'SCARCE') return 0;
+		return 0;
+	}
+
+	getColorActivity(activity: string) {
+		if (activity == 'STRONG') return "gold";
+		if (activity == 'GROWING') return "yellow";
+		if (activity == 'STATIC') return "blue";
+		if (activity == 'WEAK') return "red";
+		return "red";
+	}
+									
 	updateOtherMarkets() {
 		this.itemAtOtherMarkets = [];
 		if (this.selectedItemSymbol && this.waypoint) {
@@ -225,9 +249,10 @@ export class MarketplaceComponent implements OnInit{
 				const uiItem: UiMarketItemWithDist = {
 					marketSymbol: item.marketSymbol,
 					type: item.type,
+					itemType: MarketItemType[item.type],
 					timestamp: item.timestamp,
 					symbol: item.symbol,
-					activity: item.activity,
+					activity: item.activity || 'STATIC',
 					purchasePrice: item.purchasePrice,
 					sellPrice: item.sellPrice,
 					supply: item.supply,
@@ -326,4 +351,5 @@ export class TypedMarketItem {
 export class UiMarketItemWithDist extends UiMarketItem {
 	distance: number | undefined;
 	toMarket: string | undefined;
+	itemType: string | undefined;
 }

@@ -5,10 +5,9 @@ import { Contract } from 'src/models/Contract';
 import { Ship } from 'src/models/Ship';
 import { ShipType } from 'src/models/ShipType';
 import { Shipyard } from 'src/models/Shipyard';
-import { Survey } from 'src/models/Survey';
 import { System } from 'src/models/System';
 import { WaypointBase} from 'src/models/WaypointBase';
-import { Bot, ExecutionStep, Role } from '../utils/bot';
+import { Bot, Role } from '../utils/bot';
 import { AccountService } from './account.service';
 import { ContractService } from './contract.service';
 import { DBService } from './db.service';
@@ -16,15 +15,18 @@ import { ExplorationService } from './exploration.service';
 import { FleetService } from './fleet.service';
 import { GalaxyService } from './galaxy.service';
 import { JumpgateService } from './jumpgate.service';
-import { UiMarketItem, MarketService } from './market.service';
+import { MarketService } from './market.service';
 import { ShipyardService } from './shipyard.service';
 import { SurveyService } from './survey.service';
-import { LocXY } from 'src/models/LocXY';
 import { LogMessage } from '../utils/log-message';
 import { ConstructionSite } from 'src/models/ConstructionSite';
 import { ConstructionService } from './construction.service';
 import { MarketManager } from '../utils/market-manager';
 import { TradeManager } from '../utils/trade-manager';
+import { MineManager } from '../utils/mine-manager';
+import { Manager } from '../utils/manager';
+import { PairManager } from '../utils/pair-manager';
+import { LocXY } from 'src/models/LocXY';
 
 @Injectable({
 	providedIn: 'root'
@@ -49,10 +51,14 @@ export class AutomationService {
 	refreshShips = '';
 	refreshWaypoints = '';
 	refreshMarkets: string[] = [];
+	pauseOperationsTill = 0;
 	marketManager: MarketManager | null = null;
 	tradeManager: TradeManager | null = null;
-	managers: any[] = [];
-	
+	pairManagers: PairManager[] = [];
+	mineManager: MineManager | null = null;
+	managers: Manager[] = [];
+	executionSteps: {timeElapsed: number, ship: string, manager: string, operation: string}[] = [];
+		
 	constructor(public fleetService: FleetService,
 		        public galaxyService: GalaxyService,
 		        public accountService: AccountService,
@@ -65,10 +71,12 @@ export class AutomationService {
 		        public explorationService: ExplorationService,
 		        public dbService: DBService) {
 		this.addMessage(null, "starting...");
-		this.marketManager = new MarketManager(this);
-		this.tradeManager = new TradeManager(this);
+		this.marketManager = new MarketManager(this, 'mark');
+		this.tradeManager = new TradeManager(this, 'trade');
+		this.mineManager = new MineManager(this, 'mine');
 		this.managers.push(this.marketManager);
 		this.managers.push(this.tradeManager);
+		this.managers.push(this.mineManager);
 		this.fleetService.allShips$.subscribe((ships) => {
 			for (let ship of ships) {
 				let found = false;
@@ -122,6 +130,9 @@ export class AutomationService {
 		}
 		if (message.includes("ship is currently ")) { // "ship is currently in-transit...
 			this.refreshShips = 'All';
+		}
+		if (message.includes("you have reached your api limit.")) { // "ship is currently in-transit...
+			this.pauseOperationsTill = Date.now() + 30 * 1000;
 		}
 		const waypointCharted = "waypoint already charted: ";
 		if (message.startsWith(waypointCharted)) {
@@ -197,6 +208,17 @@ export class AutomationService {
 
 	step() {
 		const startTime = Date.now();
+		if (this.pauseOperationsTill != 0) {
+			if (this.pauseOperationsTill > startTime) {
+				console.log("no operation taken: on API pause");
+				return;
+			}
+			this.pauseOperationsTill = 0;
+		}
+		//LocXY.test();
+		let executionStep: {timeElapsed: number, ship: string, manager: string, operation: string} = {
+			timeElapsed: 0, ship: '', manager:'', operation: ''
+		};
 		try {
 			if (this.refreshAgent) {
 				this.refreshAgent = false;
@@ -229,11 +251,9 @@ export class AutomationService {
 			if (this.constructionSite == null && this.agent) {
 				const systemSymbol = GalaxyService.getSystemSymbolFromWaypointSymbol(this.agent.headquarters);
 				const system = this.systemsBySymbol.get(systemSymbol);
-				if (system) {
-					for (const waypoint of system.waypoints || []) {
-						if (waypoint.isUnderConstruction) {
-							this.getConstructionSite(waypoint.symbol);
-						}
+				for (const waypoint of system?.waypoints || []) {
+					if (waypoint.isUnderConstruction) {
+						this.getConstructionSite(waypoint.symbol);
 					}
 				}
 			}
@@ -243,8 +263,35 @@ export class AutomationService {
 				if (bot.manager == null) {
 					if (bot.role == Role.Explorer && this.marketManager) {
 						this.marketManager.addBot(bot);
-					} else if (this.tradeManager) {
+					} else if ((bot.role == Role.Miner || bot.role == Role.Siphon) && this.mineManager) {
+						this.mineManager.addBot(bot);
+					} else if (this.tradeManager && this.mineManager) {
 						this.tradeManager.addBot(bot);
+					}
+					if (this.mineManager && this.tradeManager && 
+						this.tradeManager.shipBots.length > 1 &&
+						this.mineManager.shipBots.length > 0) {
+						const mineBot = this.mineManager.shipBots[this.mineManager.shipBots.length-1];
+						const tradeBot = this.tradeManager.shipBots[this.tradeManager.shipBots.length-1];
+						let fail = true;
+						if (this.mineManager.removeBot(mineBot)) {
+							if (this.tradeManager.removeBot(tradeBot)) {
+								const pairManager = new PairManager(this, 'pair' + this.pairManagers.length);
+								if (pairManager.addBot(mineBot!) && pairManager.addBot(tradeBot!)) {
+									this.pairManagers.push(pairManager);
+									this.managers.push(pairManager);
+									this.addMessage(tradeBot!.ship, `Pairing hauler ship ${tradeBot!.ship.symbol} with miner ${mineBot!.ship.symbol}`);
+									fail = false;
+								} else {
+									pairManager.removeBot(tradeBot);
+									pairManager.removeBot(mineBot);
+								}
+							}
+						}
+						if (fail) {
+							this.mineManager.addBot(mineBot!);
+							this.tradeManager.addBot(tradeBot!);
+						}
 					}
 				}
 				if (bot.ship.nav.status != 'IN_TRANSIT') {
@@ -276,12 +323,16 @@ export class AutomationService {
 			}
 
 			for (const manager of this.managers) {
+				executionStep.manager = manager.key;
 				manager.step(this.systemsBySymbol, this.shipOperationBySymbol, this.activeShips, credits);
 			}
+			executionStep.manager = '';
 			this.galaxyService.getNextPageOfWaypoints();
 		} catch (error) {
 			if (error instanceof ExecutionStep) {
+				executionStep.operation = error.key;
 				if (error.bot?.ship) {
+					executionStep.ship = 'S-' + error.bot.ship.symbol.split('-')[1];
 					const shipSymbol = error.bot.ship.symbol;
 					this.shipOperationBySymbol.set(shipSymbol, error);
 					const shipOperationBySymbol = this.shipOperationBySymbol;
@@ -291,7 +342,6 @@ export class AutomationService {
 						  	console.error(`Command '${error}' still not cleared after 10 seconds.`);
 						}
 					}, 10_000);
-
 				}
 				this.addMessage(error.bot?.ship || null, error.message);
 				this.errorCount = Math.max(0, this.errorCount - 1);
@@ -300,17 +350,15 @@ export class AutomationService {
 			}
 		}
 		const endTime = Date.now();
-		const executionTime = endTime - startTime;
-		this.executionTimes.push(executionTime); // Add execution time to the array.
+		executionStep.timeElapsed = endTime - startTime;
+		this.executionSteps.push(executionStep); // Add execution time to the array.
 
 		// Ensure that the array has a maximum length of 10.
-		if (this.executionTimes.length > 10) {
-			this.executionTimes.shift(); // Remove the oldest execution time.
+		if (this.executionSteps.length > 10) {
+			this.executionSteps.shift(); // Remove the oldest execution time.
 		}
 
 	}
-	executionTimes: number[] = [];
-	
 	
 	findFirstFastestShipInSystem(systemSymbol: string): Bot | null {
 		systemSymbol = GalaxyService.getSystemSymbolFromWaypointSymbol(systemSymbol);
@@ -330,7 +378,7 @@ export class AutomationService {
 			return;
 		}
 		if (this.shipyardService.getCachedShipyard(waypoint.symbol, false) == null) {
-			const step = new ExecutionStep(null, `getting shipyard`);
+			const step = new ExecutionStep(null, `getting shipyard`, 'yard');
 			this.shipyardService.getShipyard(waypoint.symbol, shipsAtWaypoint)
 			                    .subscribe((response) => {
 				this.completeStep(step);
@@ -341,7 +389,7 @@ export class AutomationService {
 		}
 	}
 	doRefreshAgent() {
-		const step = new ExecutionStep(null, `refreshing agent`);
+		const step = new ExecutionStep(null, `refreshing agent`, 'agent');
 		this.accountService.fetchAgent()
 		                   .subscribe((response) => {
 			this.completeStep(step);
@@ -351,7 +399,7 @@ export class AutomationService {
 		throw step;
 	}
 	doRefreshShips(shipSymbol: string) {
-		const step = new ExecutionStep(null, `refreshing ship(s) ${shipSymbol}`);
+		const step = new ExecutionStep(null, `refreshing ship(s) ${shipSymbol}`, 'ships');
 		if (shipSymbol === 'All') {
 			this.fleetService.updateFleet()
 			                 .subscribe((response) => {
@@ -372,7 +420,7 @@ export class AutomationService {
 	
 	doRefreshWaypoints(waypointSymbol: string) {
 		const systemSymbol = GalaxyService.getSystemSymbolFromWaypointSymbol(waypointSymbol);
-		const step = new ExecutionStep(null, `refreshing waypoint ${systemSymbol}`);
+		const step = new ExecutionStep(null, `refreshing waypoint ${systemSymbol}`, 'ways');
 		this.galaxyService.getAllWaypoints(systemSymbol)
 		                  .subscribe((response) => {
 			this.completeStep(step);
@@ -396,7 +444,7 @@ export class AutomationService {
 				}
 			}
 			if (!goodsRemain) {
-				const step = new ExecutionStep(null, `fulfilling contract`);
+				const step = new ExecutionStep(null, `fulfilling contract`, 'ffill');
 				this.contractService.fulfillContract(this.contract.id)
 				                    .subscribe((response) => {
 					this.completeStep(step);
@@ -410,7 +458,7 @@ export class AutomationService {
 
 	getConstructionSite(waypointSymbol: string) {
 		if (!this.constructionSite) {
-			const step = new ExecutionStep(null, `getting Construction Site`);
+			const step = new ExecutionStep(null, `getting Construction Site`, 'site');
 			this.constructionService.getConstructionSite(waypointSymbol)
 			                        .subscribe((response) => {
 				this.completeStep(step);
@@ -425,7 +473,7 @@ export class AutomationService {
 		if (!this.contract) {
 			for (let contract of this.contractService.getContracts()) {
 				if (contract.accepted === false && contract.id) {
-					const step = new ExecutionStep(null, `Accepting contract`);
+					const step = new ExecutionStep(null, `Accepting contract`, 'accept');
 					this.contractService.acceptContract(contract.id)
 					                    .subscribe((response) => {
 						this.completeStep(step);
@@ -438,14 +486,15 @@ export class AutomationService {
 		}
 	}
 	getMarketplaceForced(waypoint: WaypointBase) {
-		const step = new ExecutionStep(null, `getting market refresh ${waypoint.symbol}`);
-		this.marketService.getMarketplaceForced(waypoint.symbol)
-		                  .subscribe((response) => {
-			this.completeStep(step);
-		}, (error) => {
-			this.onError(error, step);
-		});
-		throw step;
+		if (WaypointBase.hasMarketplace(waypoint)) {
+			for (const bot of this.shipBots) {
+				if (bot.ship.nav.status != 'IN_FLIGHT' &&
+				    bot.ship.nav.waypointSymbol == waypoint.symbol) {
+					bot.getMarketplaceForced();
+					return;
+				}
+			}
+		}
 	}
 
 
@@ -538,7 +587,7 @@ export class AutomationService {
 			for (let ship of shipyard.ships) {
 				if (ship.type === shipTypeName) {
 					if (ship.purchasePrice < (this.agent?.credits || 0)) {
-						const step = new ExecutionStep(null, `Buying ship ${shipTypeName}`);
+						const step = new ExecutionStep(null, `Buying ship ${shipTypeName}`, 'bShip');
 						this.fleetService.purchaseShip(shipTypeName, waypoint.symbol).subscribe((response) => {
 							this.completeStep(step);
 							this.refreshShips = 'All';
@@ -558,7 +607,7 @@ export class AutomationService {
 	loadWaypoints(system: System) {
 		if (!this.waypointsLoading.has(system.symbol)) {
 			this.waypointsLoading.add(system.symbol);
-			const step = new ExecutionStep(null, `Loading Waypoints for system ${system.symbol}`);
+			const step = new ExecutionStep(null, `Loading Waypoints for system ${system.symbol}`, 'system');
 			this.galaxyService.getAllWaypoints(system.symbol)
 			                  .subscribe((response) => {
 				system.waypoints = response
@@ -568,5 +617,16 @@ export class AutomationService {
 			});
 			throw step;
 		}
+	}
+}
+
+export class ExecutionStep extends Error {
+	bot: Bot | null;
+	key: string;
+	constructor(bot: Bot | null, message: string, key: string) {
+		super(message);
+		this.bot = bot;
+		this.key = key;
+		this.name = "ExecutionStep";
 	}
 }

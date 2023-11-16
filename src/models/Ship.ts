@@ -77,5 +77,13 @@ export class Ship {
 		return ship.crew.capacity - ship.crew.required;
 	}
 
+	public static getTravelTime(ship: Ship, travelSpeed: string, dist: number) {
+		let mult = 1000;
+		if (travelSpeed == 'DRIFT') mult = 250;
+		else if (travelSpeed == 'CRUISE')  mult = 25;
+		else if (travelSpeed == 'BURN')    mult = 7.5;
+		else if (travelSpeed == 'STEALTH') mult = 30;
+		return Math.floor(Math.round(Math.max(1, dist)) * mult / ship.engine.speed) + 15;
+	}
 }
 

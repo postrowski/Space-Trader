@@ -174,7 +174,7 @@ export class ExplorationService {
 			(value, index, self) => self.findIndex((v) => v.x === value.x && v.y === value.y) === index
 		));
 
-		const route = LocXY.findShortestPath(startingLoc, uniqueLocs);
+/*		const route = LocXY.findShortestPath(startingLoc, uniqueLocs);
 		if (route.length > 1) {
 			let nextLoc = null;
 			for (let i=0 ; i< route.length ; i++) {
@@ -200,6 +200,7 @@ export class ExplorationService {
  				}
 			}
 		}
+*/
 		// Something went wrong - we couldn't find ourselves in the path list.
 		// for now, just go to the nearest uncharted waypoint:
 		return waypoints[0];

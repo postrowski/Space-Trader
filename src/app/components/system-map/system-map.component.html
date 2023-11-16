@@ -70,15 +70,20 @@
     <text [attr.x]="xOffset + waypoint.loc.x * scale + getTextLocationOffset(waypoint.base).x"
 			[attr.y]="yOffset + waypoint.loc.y * scale + getTextLocationOffset(waypoint.base).y"
 			[attr.text-anchor]="getTextAnchor(waypoint.base)"
-			*ngIf="getSize(waypoint.base) > 4"
-			[attr.font-size]="getSize(waypoint.base) + 6" [attr.fill]="waypoint.textColor"
+			[attr.font-size]="getFontSize(waypoint.base)"
 			(click)="systemClick(waypoint)" style="cursor: pointer;">
 	  <title>{{ waypoint.base.type }} {{waypoint.base.symbol}} - [{{waypoint.base.x}}, {{waypoint.base.y}}]</title>
-      <tspan [attr.font-weight]="selectedWaypoint === waypoint ? '800' : '100'" 
-         [attr.text-decoration]="selectedWaypoint === waypoint ? 'underline' : ''">
+	  <tspan *ngIf="hasMarketplace(waypoint.base)" fill="#FFD700">
+	      <title>Market</title>$</tspan>
+      <tspan *ngIf="getFontSize(waypoint.base) > 12"
+         [attr.font-weight]="selectedWaypoint === waypoint ? '800' : '100'" 
+         [attr.text-decoration]="selectedWaypoint === waypoint ? 'underline' : ''"
+         [attr.fill]="waypoint.textColor">
       {{isJumpGate(waypoint.base) ? 'Jump Gate' : 
-      isOrbitalStation(waypoint.base) ? 'Station' :waypoint.base.symbol.substring((system.symbol || '').length + 1)}}
+      waypoint.base.symbol.substring((system.symbol || '').length + 1)}}
       </tspan>
+      <tspan *ngIf="hasShipyard(waypoint.base)" fill="#4444FF">
+	     <title>shipyard</title>⚓</tspan>
     </text>
     <text *ngIf="hasUncharted(waypoint.base)"
           [attr.x]="xOffset + waypoint.loc.x * scale"
@@ -90,19 +95,6 @@
       ?
     </text>
     <!-- decorations for the waypoint -->
-  	<text *ngIf="hasShipyard(waypoint.base)"
-		[attr.x]="xOffset + waypoint.loc.x * scale + 5+getSize(waypoint.base)"
-		[attr.y]="yOffset + waypoint.loc.y * scale + 2"
-		[attr.font-size]="8+getSize(waypoint.base)" fill="#4444FF"
-		(click)="systemClick(waypoint)"
-		style="cursor: pointer;">
-	     <title>shipyard</title>⚓</text>
-	<text *ngIf="hasMarketplace(waypoint.base)"
-		[attr.x]="xOffset + waypoint.loc.x * scale -5-getSize(waypoint.base)"
-		[attr.y]="yOffset + waypoint.loc.y * scale + 2"
-		[attr.font-size]="8+getSize(waypoint.base)" fill="#FFD700" text-anchor="end"
-		(click)="systemClick(waypoint)" style="cursor: pointer;">
-	      <title>Market</title>$</text>
 	<text *ngIf="isJumpGate(waypoint.base)"
 		[attr.x]="xOffset + waypoint.loc.x * scale"
 		[attr.y]="yOffset + waypoint.loc.y * scale +getSize(waypoint.base)"

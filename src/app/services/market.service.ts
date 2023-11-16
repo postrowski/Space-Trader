@@ -14,6 +14,7 @@ import { Agent } from 'src/models/Agent';
 import { ShipFuel } from 'src/models/ShipFuel';
 import { FleetService } from './fleet.service';
 import { ShipCargo } from 'src/models/ShipCargo';
+import { Ship } from 'src/models/Ship';
 
 @Injectable({
   providedIn: 'root'
@@ -217,15 +218,17 @@ export class MarketService {
 		                  = this.marketItemsByTradeSymbolByWaypointSymbol.get(marketSymbol);
 		return marketItemsByTradeSymbol?.get(itemSymbol) || [];
 	}
-	getItemHistoricalLowPriceAtMarket(marketSymbol: string, itemSymbol: string): number{
+	getItemHistoricalLowPriceAtMarket(marketSymbol: string, itemSymbol: string, sinceTime: number): number{
 		let bestPrice = Infinity;
 		const marketItemsByTradeSymbol: Map<string, UiMarketItem[]> | undefined
 	                  = this.marketItemsByTradeSymbolByWaypointSymbol.get(marketSymbol);
 		const allItems = marketItemsByTradeSymbol?.get(itemSymbol) || [];
 		for (let item of allItems) {
-			const price = item.purchasePrice;
-			if (price < bestPrice) {
-				bestPrice = price;
+			if (item.timestamp.getTime() > sinceTime) {
+				const price = item.purchasePrice;
+				if (price < bestPrice) {
+					bestPrice = price;
+				}
 			}
 		}
 		return bestPrice;
@@ -282,9 +285,9 @@ export class MarketService {
 		}
 		return bestMarketItem;
 	}
-	findHighestPricedMarketItemForSaleInSystem(fromWaypoint: WaypointBase, itemSymbol: string, unitsToSell: number): UiMarketItem | null {
-		let bestMarketItem: UiMarketItem | null = null;
-		let bestProfit = 0;
+	findHighestPricedMarketItemForSaleInSystem(ship: Ship, fromWaypoint: WaypointBase, itemSymbol: string, unitsToSell: number)
+	: {marketItem: UiMarketItem, profitPerSecond: number, travelSpeed: string} | null {
+		let best: {marketItem: UiMarketItem, profitPerSecond: number, travelSpeed: string} | null = null;
 		const systemSymbol = GalaxyService.getSystemSymbolFromWaypointSymbol(fromWaypoint.symbol);
 		const fuelPricesByWaypointSymbol = this.getPricesForItemInSystemByWaypointSymbol(systemSymbol, 'FUEL');
 		const localFuelCostItem = fuelPricesByWaypointSymbol.get(fromWaypoint.symbol);
@@ -297,15 +300,24 @@ export class MarketService {
 			const marketFuelCost = marketFuelCostItem?.purchasePrice || Infinity;
 			const fuelCost = Math.min(marketFuelCost, localFuelCost, this.getAverageFuelCost(systemSymbol));
 			if (marketItem && market) {
-				const dist = LocXY.getDistance(fromWaypoint, market);
-				const profit = marketItem.sellPrice * unitsToSell - dist * fuelCost;
-				if (bestMarketItem == null || profit > bestProfit) {
-					bestMarketItem = marketItem;
-					bestProfit = profit;
+				let dist = LocXY.getDistance(fromWaypoint, market);
+				if ((dist == 0 && fromWaypoint.symbol != market.symbol)) {
+					dist = 1;
+				}
+				const driftProfit = marketItem.sellPrice * unitsToSell - 2 * fuelCost;
+				const cruiseProfit = marketItem.sellPrice * unitsToSell - dist * fuelCost;
+				const driftProfitPerSecond = driftProfit / Ship.getTravelTime(ship, 'DRIFT', dist);
+				const cruiseProfitPerSecond = cruiseProfit / Ship.getTravelTime(ship, 'CRUISE', dist);
+				
+				if ((best == null) || (driftProfitPerSecond > best.profitPerSecond)) {
+					best = {marketItem: marketItem, profitPerSecond: driftProfitPerSecond, travelSpeed: 'DRIFT'};
+				}
+				if ((best == null) || (cruiseProfitPerSecond > best.profitPerSecond)) {
+					best = {marketItem: marketItem, profitPerSecond: driftProfitPerSecond, travelSpeed: 'CRUISE'};
 				}
 			}
 		}
-		return bestMarketItem;
+		return best;
 	}
 
 	updatePrices(transaction: MarketTransaction) {

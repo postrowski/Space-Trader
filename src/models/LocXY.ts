@@ -5,7 +5,6 @@ export class LocXY {
 	public constructor(x: number, y: number) {
 		this.x = x;
 		this.y = y;
-		LocXY.test();
 	}
 	
 	public update(src: LocXY) {
@@ -38,10 +37,10 @@ export class LocXY {
 		}
 	}
 
-	public static findShortestPath(currentLoc: LocXY, remainingLocs: Set<LocXY>)
-	            : LocXY[] {
+	public static findShortestPath(currentLoc: LocXY, remainingLocs: Set<LocXY>): LocXY[] {
 		const startTime = Date.now();
-		const loop: LocXY[] = LocXY.findShortestPathLoop([...remainingLocs]);
+		const solver = new TSPSolver();
+		const loop: LocXY[] = solver.findPath(remainingLocs, currentLoc);
 		let diag = `places to visit, starting from (${currentLoc.x}, ${currentLoc.y})\n`;
 		for (let loc of remainingLocs) {
 			diag += `(${loc.x}, ${loc.y}),`;
@@ -54,73 +53,63 @@ export class LocXY {
 		console.log(diag);
 		return loop;
 	}
-	
-	public static findShortestPathLoop(locations: LocXY[]): LocXY[] {
-		// use the the Held-Karp algorithm:
-		const n = locations.length;
+}
 
-		// Calculate all possible subsets of locations
-		const subsets = (1 << n) - 1;
+export class TSPSolver {
+	private memo: Map<string, { cost: number, path: LocXY[] }> = new Map();
 
-		const dp: number[][] = Array(n).fill(null)
-		                               .map(() => Array(subsets).fill(Number.POSITIVE_INFINITY));
-		dp[0][0] = 0;
+	findPath(locations: Set<LocXY>, startEndPoint: LocXY): LocXY[] {
+		const locationsArray = Array.from(locations);
+		const startIndex = locationsArray.findIndex(loc => loc.x === startEndPoint.x && loc.y === startEndPoint.y);
 
-		for (let mask = 0; mask < subsets; mask++) {
-			for (let u = 0; u < n; u++) {
-				if (!(mask & (1 << u)))
-					continue;
+		if (startIndex === -1) {
+			// Handle the case where startEndPoint is not in the set
+			// You may want to add custom logic or throw an error
+			console.error("Start point not found in locations set.");
+			return [];
+		}
 
-				for (let v = 0; v < n; v++) {
-					if (u === v || !(mask & (1 << v)))
-						continue;
+		const result = this.solve(startIndex, locationsArray);
+		return result.path;		
+	}
 
-					const prevMask = mask ^ (1 << v);
-					dp[u][mask] = Math.min(dp[u][mask],
-					                       dp[v][prevMask] + LocXY.getDistance(locations[u], locations[v]));
+	// use the the Held-Karp algorithm:
+	private solve(currIndex: number, remainingLocations: LocXY[]): { cost: number, path: LocXY[] } {
+		if (remainingLocations.length === 0) {
+			// Base case: All locations visited
+			return { cost: 0, path: [] };
+		}
+		if (remainingLocations.length === 1) {
+			// Base case: One path to take
+			return { cost: 0, path: remainingLocations };
+		}
+
+		const memoKey = `${currIndex}_${remainingLocations.join(',')}`;
+		if (this.memo.has(memoKey)) {
+			return this.memo.get(memoKey)!;
+		}
+
+		let minCost = Number.POSITIVE_INFINITY;
+		let minPath: LocXY[] = [];
+
+		for (let i = 0; i < remainingLocations.length; i++) {
+			if (i !== currIndex) {
+				const nextIndex = remainingLocations.indexOf(remainingLocations[i]);
+				const rest = [...remainingLocations.slice(0, i), ...remainingLocations.slice(i + 1)];
+				const subproblem = this.solve(nextIndex, rest);
+				const distance = LocXY.getDistance(remainingLocations[currIndex], remainingLocations[i]);
+
+				const totalCost = distance + subproblem.cost;
+
+				if (totalCost < minCost) {
+					minCost = totalCost;
+					minPath = [remainingLocations[i], ...subproblem.path];
 				}
 			}
 		}
 
-		const path: number[] = [];
-		let u = 0;
-		let mask = subsets - 1;
-
-		for (let v = 1; v < n; v++) {
-			if (dp[u][mask] === dp[v][subsets - 1] + LocXY.getDistance(locations[u], locations[v])) {
-				path.push(u);
-				mask ^= (1 << u);
-				u = v;
-			}
-		}
-
-		path.push(u);
-		return path.map(i => locations[i]);
+		const result = { cost: minCost, path: minPath };
+		this.memo.set(memoKey, result);
+		return result;
 	}
-	
-/*	public static findShortestPath(currentLoc: LocXY, remainingLocs: Set<LocXY>)
-	            : { path: LocXY[]; distance: number } {
-		if (remainingLocs.size === 0) {
-			// Base case: All locations visited
-			return { path: [currentLoc], distance: 0 };
-		}
-
-		let shortestPath: LocXY[] | undefined;
-		let shortestDistance: number = Number.POSITIVE_INFINITY;
-
-		for (const nextLoc of remainingLocs) {
-			const remainingLocsCopy = new Set(remainingLocs);
-			remainingLocsCopy.delete(nextLoc);
-
-			const result = LocXY.findShortestPath(nextLoc, remainingLocsCopy);
-			const distance = LocXY.getDistance(currentLoc, nextLoc) + result.distance;
-
-			if (distance < shortestDistance) {
-				shortestDistance = distance;
-				shortestPath = [currentLoc, ...result.path];
-			}
-		}
-		return { path: shortestPath || [], distance: shortestDistance };
-	}
-*/
 }

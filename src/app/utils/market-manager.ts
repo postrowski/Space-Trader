@@ -7,6 +7,33 @@ import { Manager } from "./manager";
 export class MarketManager extends Manager {
 
 	doStep(bot: Bot, system: System, waypoint: WaypointBase, credits: number): void {
+		/*if (credits > 170_000) {
+			const shipyard = this.shipyardService.findNearestShipyard(waypoint);
+			if (shipyard) {
+				const houndShips = shipyard.ships.filter(ship => ship.name.toLowerCase().includes('hound'));
+				if (houndShips && (houndShips.length > 0) && 
+					credits > houndShips[0].purchasePrice) {
+					let botsAtYard = botsByWaypointSymbol.get(shipyard.symbol);
+					if (!botsAtYard) {
+						this.addMessage(bot.ship, 'going to shipyard to buy ship');
+						waypointDest = shipyard.symbol;
+					}
+				}
+			} else {
+				if (system.waypoints && System.hasShipyard(system)) {
+					const shipyardWaypoints: WaypointBase[] = system.waypoints.filter((waypoint) => {
+						return WaypointBase.hasShipyard(waypoint);
+					});
+					if (shipyardWaypoints?.length) {
+						let botsAtYard = botsByWaypointSymbol.get(shipyardWaypoints[0].symbol);
+						if (!botsAtYard) {
+							this.addMessage(bot.ship, 'going to shipyard to look at ship');
+							waypointDest = shipyardWaypoints[0].symbol;
+						}
+					}
+				}
+			}
+		}*/
 		this.exploreSystems(bot, waypoint);
 	}
 	

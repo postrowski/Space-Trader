@@ -25,11 +25,21 @@
 				</tr>
 				<tr>
 					<td>
+						<div *ngIf="showMount === 'true'">
+							<div class="mount" *ngFor="let mount of ship!.mounts"
+							     title="{{mount.description}}">{{ mount.name}}
+								<button (click)="onRemoveMount(ship, mount)">Remove</button>
+							</div>
+						</div>
 						<div cdkDropList class="draggable-list"
 							(cdkDropListDropped)="onDrop($event)">
 							<div cdkDrag [cdkDragData]="cargoItem" class="cargoItem"
-								*ngFor="let cargoItem of ship!.cargo.inventory">{{
-								cargoItem.name }} x{{cargoItem.units}}</div>
+								*ngFor="let cargoItem of ship!.cargo.inventory"
+								title="{{cargoItem.description}}">
+								{{cargoItem.name }} x{{cargoItem.units}}
+								<button *ngIf="showMount === 'true' && cargoItem.symbol.startsWith('MOUNT_') && (ship.frame.mountingPoints > ship.mounts.length)"
+								        (click)="onInstallMount(ship, cargoItem)">Install</button>
+							</div>
 							<div class='emptyCargoSpot'>Empty spaces
 								x{{ship.cargo.capacity - ship.cargo.units}}</div>
 						</div>

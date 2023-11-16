@@ -18,4 +18,5 @@ div.module-detail, div.mount-detail {
 }
 .selected-row {
   background-color: #e0e0e0;
+  color: black;
 }

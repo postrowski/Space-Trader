@@ -26,8 +26,12 @@
 				</button>
 			</td>	
 
-			<td *ngFor="let time of automationService.executionTimes">
-				<div class="time">{{time}}</div>
+			<td *ngFor="let step of automationService.executionSteps">
+				<div class="step">{{step.timeElapsed}}<br/>
+					{{step.ship}}<br/>
+					{{step.manager}}<br/>
+					{{step.operation}}<br/>
+				</div>
 			</td>
 		</tr>
 	</table>

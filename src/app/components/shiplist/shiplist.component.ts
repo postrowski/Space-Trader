@@ -10,6 +10,7 @@ import { SurveyService } from 'src/app/services/survey.service';
 import { AccountService } from 'src/app/services/account.service';
 import { Agent } from 'src/models/Agent';
 import { MarketService } from 'src/app/services/market.service';
+import { ShipMount } from 'src/models/ShipMount';
 
 @Component({
   selector: 'app-shiplist',
@@ -23,6 +24,7 @@ export class ShiplistComponent implements OnInit {
 	selectedShip: Ship | null = null;
 	selectedCargoItem: ShipCargoItem | null = null;
 	@Input() showMine: string = 'false';
+	@Input() showMount: string = 'false';
 	@Input() showSurvey: string = 'false';
 	@Input() showSell: string = 'false';
 	account: Agent | null = null;
@@ -176,6 +178,21 @@ export class ShiplistComponent implements OnInit {
 	onMine(ship: Ship) {
 		if (ship) {
 			this.onMineClicked.emit(ship);
+		}
+	}
+
+	onInstallMount(ship: Ship, cargoItem: ShipCargoItem) {
+		if (cargoItem) {
+			this.fleetService.installMount(ship.symbol, cargoItem.symbol).subscribe((response) => {
+				alert("mount installed!");
+			});
+		}
+	}
+	onRemoveMount(ship: Ship, mount: ShipMount) {
+		if (mount) {
+			this.fleetService.removeMount(ship.symbol, mount.symbol).subscribe((response) => {
+				alert("mount removed!");
+			});
 		}
 	}
 	

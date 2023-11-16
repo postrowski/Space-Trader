@@ -85,3 +85,23 @@ button[enabled=false] {
 	background-color: #F0F0F0;
 	border-color: #BBBBBB;
 }
+
+.empty.mount, .empty.module {
+	background-color: #DDDDDD;
+  	color: black;
+}
+.module {
+	background-color: #DDFFDD;
+ 	color: black;
+}
+.mount {
+	background-color: #DDDDFF;
+  	color: black;
+}
+.module, .mount{
+	padding: 2px;
+	border: 1px solid black;
+	border-radius: 5px;
+	white-space: nowrap;
+	font-size: x-small;
+}

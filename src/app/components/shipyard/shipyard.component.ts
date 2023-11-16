@@ -23,7 +23,6 @@ export class ShipyardComponent implements OnInit{
 	shipyard?: Shipyard;
 	account: Agent | null = null;
 	shipsAtWaypoint: Ship[] = [];
-	selectedShip: Ship | null = null;
 	constructor(public galaxyService: GalaxyService,
 	            public fleetService: FleetService,
 	            public accountService: AccountService,
@@ -73,14 +72,7 @@ export class ShipyardComponent implements OnInit{
 			for (let ship of allShips) {
 				if (ship.nav.waypointSymbol == this.waypoint?.symbol) {
 					this.shipsAtWaypoint.push(ship);
-					if (this.selectedShip == null) {
-						this.selectedShip = ship;
-					}
 				}
-			}
-			let fleetActiveShip = this.fleetService.getActiveShip();
-			if (fleetActiveShip && this.shipsAtWaypoint.includes(fleetActiveShip)) {
-				this.selectedShip = fleetActiveShip;
 			}
 		})
 	}
@@ -88,26 +80,6 @@ export class ShipyardComponent implements OnInit{
 		if (this.waypoint) {
 			this.fleetService.purchaseShip(ship.type, this.waypoint.symbol).subscribe((response) => {
 				alert("Ship purchased!");
-			});
-		}
-	}
-	onDockShip(ship: Ship) {
-		if (ship) {
-			this.fleetService.dockShip(ship.symbol).subscribe((response) => {
-			});
-		}
-	}
-	onInstallMount(ship: Ship, cargoItem: ShipCargoItem) {
-		if (cargoItem) {
-			this.fleetService.installMount(ship.symbol, cargoItem.symbol).subscribe((response) => {
-				alert("mount installed!");
-			});
-		}
-	}
-	onRemoveMount(ship: Ship, mount: ShipMount) {
-		if (mount) {
-			this.fleetService.removeMount(ship.symbol, mount.symbol).subscribe((response) => {
-				alert("mount removed!");
 			});
 		}
 	}

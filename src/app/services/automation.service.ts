@@ -26,7 +26,6 @@ import { TradeManager } from '../utils/trade-manager';
 import { MineManager } from '../utils/mine-manager';
 import { Manager } from '../utils/manager';
 import { PairManager } from '../utils/pair-manager';
-import { LocXY } from 'src/models/LocXY';
 
 @Injectable({
 	providedIn: 'root'
@@ -45,9 +44,10 @@ export class AutomationService {
 	contract: Contract | null = null;
 	constructionSite: ConstructionSite | null = null;
 	systemsBySymbol = new Map<string, System | null>();
-	shipOperationBySymbol: Map<string, ExecutionStep> = new Map();
+	shipOperationBySymbol = new Map<string, ExecutionStep>();
 
 	refreshAgent = false;
+	serverResetHappening = false;
 	refreshShips = '';
 	refreshWaypoints = '';
 	refreshMarkets: string[] = [];
@@ -116,22 +116,65 @@ export class AutomationService {
 		
 		message = `${ship?.symbol}: ${new Date().toLocaleTimeString()} - ${message}`;
 	}
-	
-	onError(error: any, step: ExecutionStep) {
+
+	onServerReset() {
+		this.agent = null;
+		this.shipBots = [];
+		this.contract = null;
+		this.constructionSite = null;
+		this.systemsBySymbol = new Map<string, System | null>();
+		this.shipOperationBySymbol = new Map<string, ExecutionStep>();
+
+		this.refreshAgent = false;
+		this.serverResetHappening = false;
+		this.refreshShips = '';
+		this.refreshWaypoints = '';
+		this.refreshMarkets = [];
+		this.pauseOperationsTill = 0;
+		this.marketManager = null;
+		this.tradeManager = null;
+		this.pairManagers = [];
+		this.mineManager = null;
+		this.managers = [];
+		this.executionSteps = [];
+		this.fleetService.onServerReset();
+		this.galaxyService.onServerReset();
+		this.accountService.onServerReset();
+        this.surveyService.onServerReset();
+		this.contractService.onServerReset();
+		this.constructionService.onServerReset();
+		this.marketService.onServerReset();
+		this.shipyardService.onServerReset();
+		this.jumpgateService.onServerReset();
+		this.explorationService.onServerReset();
+		this.dbService.onServerReset();
+	}
+		
+	handleErrorMessage(error: any, shipSymbol: string | null) {
 		while (error.error) {
 			error = error.error;
 		}
 		const message = error.message.toLowerCase();
+		this.addMessage(null, "Error condition! " + message);
+		if (message.includes("Token version does not match the server")) {
+			if (this.serverResetHappening) {
+				return;
+			}
+			this.onServerReset();
+		}
 		if (message.includes("insufficient funds")) {
 			this.refreshAgent = true;
 		}
 		if (message.includes("ship is not currently ")) { // "...in orbit" or "...docked"
-			this.refreshShips = 'All';
+			this.refreshShips = shipSymbol || 'All';
+		}
+		if (message.includes("cargo does not contain")) {// "Failed to update ship cargo. Ship BLACKRAT-1 cargo does not contain 35 unit(s) of PLATINUM. Ship has 0 unit(s) of PLATINUM."
+			this.refreshShips = shipSymbol || 'All';
 		}
 		if (message.includes("ship is currently ")) { // "ship is currently in-transit...
-			this.refreshShips = 'All';
+			this.refreshShips = shipSymbol || 'All';
 		}
-		if (message.includes("you have reached your api limit.")) { // "ship is currently in-transit...
+		if (message.includes("you have reached your api limit.")) {
 			this.pauseOperationsTill = Date.now() + 30 * 1000;
 		}
 		const waypointCharted = "waypoint already charted: ";
@@ -148,10 +191,12 @@ export class AutomationService {
 				}
 			}
 			if (!found) {
-				this.refreshShips = 'All';
+				this.refreshShips = shipSymbol || 'All';
 			}
 		}
-		this.addMessage(null, "Error condition! " + message);
+	}
+	onError(error: any, step: ExecutionStep) {
+		this.handleErrorMessage(error, null);
 		this.completeStep(step);
 		// We add two to the errorCount, because the call to completeStep decrements by 1, and we need to overcome that
 		this.errorCount += 2; 

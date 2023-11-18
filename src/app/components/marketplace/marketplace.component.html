@@ -51,7 +51,7 @@
 						<line x1="0" x2="400" [attr.y1]="250 - 10*getYCoordinateSupply(supply)" [attr.y2]="250 - 10*getYCoordinateSupply(supply)" stroke="grey" stroke-width=".5"></line>
 						<text x="405" [attr.y]="252 - 10*getYCoordinateSupply(supply)" font-size="10" fill="#888888">{{supply.toLowerCase()}}</text> 
 					</g>
-					<g *ngFor="let activity of ['STRONG','GROWING','STATIC','WEAK']">
+					<g *ngFor="let activity of ['STRONG','GROWING','STATIC','WEAK','RESTRICTED']">
 						<line x1="0" x2="400" [attr.y1]="300 - 10*getYCoordinateActivity(activity)" [attr.y2]="300 - 10*getYCoordinateActivity(activity)" stroke="grey" stroke-width=".5"></line>
 						<text x="405" [attr.y]="302 - 10*getYCoordinateActivity(activity)" font-size="10" fill="#888888">{{activity.toLowerCase()}}</text> 
 					</g>

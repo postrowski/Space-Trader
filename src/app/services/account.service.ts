@@ -14,7 +14,7 @@ import { DBService } from './db.service';
 export class AccountService {
 	private apiUrl = 'https://api.spacetraders.io/v2/';
 	
-	token = "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZGVudGlmaWVyIjoiQkxBQ0tSQVQiLCJ2ZXJzaW9uIjoidjIuMS4xIiwicmVzZXRfZGF0ZSI6IjIwMjMtMTEtMDQiLCJpYXQiOjE2OTkxMTkxNDksInN1YiI6ImFnZW50LXRva2VuIn0.a66cFZcuaE-JntTg4VIz0ulrD_aWH0F5k_pAv4Krrj7Y9rRCWnbWHYD-Cu8g6ijv0u2ANiMDkAaRjIY6x4GoXpOw7yrgJhT59kD4yMuTWW34dpcLHjoodFSkGC74pax0Mw70gOO2JLiYPET7Br_oYNQZKiL2yLoixSqWj5bwrPdCorsmUMPhTVbUclCyhIscZmf6WpAPV0AZRwoaqq3RKn6cXuRjafx4u6yVXaLXJ_25uhbh0Tz9k1alGVPy2my8B9onu9KdRdcM2enTaTDefl2dU0zthOk50Mn4cPx7dsT4dv120frBEZiXAvKxxeUdDadYStCDLmqvE8Ur2FRiIg";
+	token = "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZGVudGlmaWVyIjoiQkxBQ0tSQVQiLCJ2ZXJzaW9uIjoidjIuMS4yIiwicmVzZXRfZGF0ZSI6IjIwMjMtMTEtMTgiLCJpYXQiOjE3MDAzMzEwMjcsInN1YiI6ImFnZW50LXRva2VuIn0.j1gq5EqxcWnjmbS2rKXdJdxcJE7nvS-y2TUu91l5zCHcnqWSHKzZ7qCxRf583i09eRM2FwYYwvg-qbw8tQe2vZP2xubeDNTE-C6xzencIxq-wA-4uf7oYA3N343u-J9Xggs_OZbcBzt8-su_8VXFS0oZ9s551FU3z9AQPQRd3fMG43i778zhuSQZLyjJKAWxL-EBWzh7T1zlP3zVDcIuYvM_zACJ2VrLyO-Bnz296xhI0Ru4jinUKYFrdgZ-3F10ICWGxZ-oiS5UY-tPr5oF9orYLl4j-07Lq5KnoLmQHRFk5JBXf2AcpzmsRbvsaxwC3zfSq9nBF_v0TCUM4dJVOA";
 	
 	errorMessages: string[] = [];
 	accountValid = false;
@@ -43,6 +43,14 @@ export class AccountService {
 		}, (error) => {
 			console.error("Error opening DB: " + error)
 		});
+	}
+	onServerReset() {
+		this.errorMessages = [];
+		this.accountValid = false;
+		this.agentSubject.next(null);
+		this.contractSubject.next(null);
+		this.factionSubject.next(null);
+		this.allFactionsSubject.next([]);
 	}
 
 	// Event handler to update the field with the emitted value

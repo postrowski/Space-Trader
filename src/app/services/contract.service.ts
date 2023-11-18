@@ -28,6 +28,17 @@ export class ContractService implements OnInit {
 	private acceptedContractSubject = new BehaviorSubject<Contract | null>(null);
 	acceptedContract$: Observable<Contract | null> = this.acceptedContractSubject.asObservable();
 
+	constructor(private http: HttpClient,
+				public accountService: AccountService,
+	            public fleetService: FleetService) {
+	}
+
+	onServerReset() {
+		this.allContractsSubject.next([]);
+		this.selectedContractSubject.next(null);
+		this.acceptedContractSubject.next(null);
+	}
+
 	setSelectedContract(Contract: Contract) {
 		this.selectedContractSubject.next(Contract);
 	}
@@ -37,11 +48,6 @@ export class ContractService implements OnInit {
 	}
 	getContracts(): Contract[] {
 		return this.allContractsSubject.value;
-	}
-
-	constructor(private http: HttpClient,
-				public accountService: AccountService,
-	            public fleetService: FleetService) {
 	}
 
 	ngOnInit() {

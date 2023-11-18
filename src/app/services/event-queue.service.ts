@@ -21,6 +21,9 @@ export class EventQueueService {
 
 	constructor(public dbService: DBService) { }
 
+	onServerReset() {
+	}
+
 	// Method to register an event to be executed at a specific time
 	scheduleEvent(callback: () => void, timeStr: string): void {
 		const time = new Date(timeStr).getTime();

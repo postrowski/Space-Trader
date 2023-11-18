@@ -12,7 +12,6 @@ import { JumpgateService } from "../services/jumpgate.service";
 import { SurveyService } from "../services/survey.service";
 import { Contract } from "src/models/Contract";
 import { ConstructionSite } from "src/models/ConstructionSite";
-import { LocXY } from "src/models/LocXY";
 
 export abstract class Manager {
 	shipBots: Bot[] = [];
@@ -168,8 +167,17 @@ export abstract class Manager {
 		}
 		
 		if (waypointsToExplore && waypointsToExplore.length > 0) {
-			// Navigate to the next waypoint that needs to be explored:
-			bot.traverseWaypoints(waypointsToExplore, waypoint, "exploring");
+			// check to see which waypoints have ships already in-route or present:
+			for (const bot of this.automationService.shipBots) {
+				const index = waypointsToExplore.findIndex((way)=> way.symbol == bot.ship.nav.waypointSymbol);
+				if (index == -1) {
+					waypointsToExplore.splice(index, 1);
+				}
+			}
+			if (waypointsToExplore && waypointsToExplore.length > 0) {
+				// Navigate to the next waypoint that needs to be explored:
+				const loc = bot.traverseWaypoints(waypointsToExplore, waypoint, "exploring");
+			}
 		}
 		
 		if (hasShipyard) {
@@ -177,7 +185,7 @@ export abstract class Manager {
 		}
 		this.upgradeShipIfNeeded(bot, waypoint, credits);
 	}
-
+	
 	upgradeShipIfNeeded(bot: Bot, waypoint: WaypointBase, credits: number) {
 		const neededUpgrade = bot.getNeededUpgrade();
 		let waypointDest: string | null = null;
@@ -219,27 +227,26 @@ export abstract class Manager {
 	sellAll(bot: Bot, waypoint: WaypointBase) {
 		bot.deliverAll(this.contract, this.constructionSite);
 		let inventory = [...bot.ship.cargo.inventory];
-		inventory = inventory.filter((inv) => !inv.symbol.startsWith("MODULE") &&
-											  !inv.symbol.startsWith("MOUNT") &&
-											  !inv.symbol.includes("ANTIMATTER"));
+		inventory = inventory.filter((inv) => inv.units > 0 &&
+		                             bot.canSellOrJettisonCargo(inv.symbol, this.contract, this.constructionSite));
 		inventory.sort((i1, i2) => {
 			if (i1.units < i2.units) return -1;
 			if (i1.units > i2.units) return 1;
 			return 0;
 		}).reverse();
 		for (const inv of inventory) {
-			const sellPlan = this.marketService.findHighestPricedMarketItemForSaleInSystem(bot.ship, waypoint,
-			                                                                               inv.symbol, inv.units);
+			const sellPlan = this.marketService.findBestMarketToSell(bot.ship, waypoint,
+			                                                         inv.symbol, inv.units, 0);
 			if (!sellPlan || sellPlan.profitPerSecond < 0) {
 				continue;
 			}
-			if (sellPlan.marketItem.marketSymbol == waypoint.symbol) {
-				bot.sellCargo(sellPlan.marketItem.symbol, inv.units);
+			if (sellPlan.sellItem.marketSymbol == waypoint.symbol) {
+				bot.sellCargo(sellPlan.sellItem.symbol, inv.units);
 			} else {
-				const market = this.galaxyService.getWaypointByWaypointSymbol(sellPlan.marketItem.marketSymbol);
+				const market = this.galaxyService.getWaypointByWaypointSymbol(sellPlan.sellItem.marketSymbol);
 				if (market) {
 					bot.navigateTo(market, sellPlan.travelSpeed,
-					               `Navigating to ${sellPlan.marketItem.marketSymbol} to sell ${sellPlan.marketItem.symbol}`);
+					               `Navigating to ${sellPlan.sellItem.marketSymbol} to sell ${sellPlan.sellItem.symbol}`);
 				}
 			}
 		}

@@ -13,6 +13,9 @@ export class ModalService {
 
 	constructor(public galaxyService: GalaxyService) {
 	}
+	onServerReset() {
+		this.waypointSubject.next(null);
+	}
 	
     add(modal: ModalComponent) {
         // ensure component has a unique id attribute

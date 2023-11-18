@@ -14,7 +14,12 @@ export class SurveyService {
 	selectedSurvey: Survey | null = null;
 
 	constructor() { }
-	
+
+	onServerReset() {
+		this.allSurveysSubject.next([]);
+		this.selectedSurvey = null;
+	}
+
 	deleteSurvey(survey: Survey) {
 		const index = this.allSurveysSubject.value.indexOf(survey);
 		if (index != -1) {

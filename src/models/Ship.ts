@@ -85,5 +85,10 @@ export class Ship {
 		else if (travelSpeed == 'STEALTH') mult = 30;
 		return Math.floor(Math.round(Math.max(1, dist)) * mult / ship.engine.speed) + 15;
 	}
+	public static getFuelUsed(ship: Ship, travelSpeed: string, dist: number) {
+		if (travelSpeed == 'DRIFT') return 1;
+		if (travelSpeed == 'BURN') return 2*dist;
+		return dist;
+	}
 }
 

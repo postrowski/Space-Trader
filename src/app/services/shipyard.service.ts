@@ -16,6 +16,11 @@ export class ShipyardService {
 
 	private allShipyardsSubject = new BehaviorSubject<Shipyard[] | null>(null);
 	allShipyards$: Observable<Shipyard[] | null> = this.allShipyardsSubject.asObservable();
+	
+	shipyardByWaypointSymbol = new Map<string, Shipyard>();
+	shipyardExpirationTimestampByWaypointSymbol = new Map<string, number>();
+	shipyardsBySystemSymbol = new Map<string, Shipyard[]>();
+	shipyardExpirationTime = 15 * 60 * 1000; // 15 minutes
 
 	constructor(private http: HttpClient,
 				public galaxyService: GalaxyService,
@@ -30,11 +35,12 @@ export class ShipyardService {
 			});
 		});
 	}
-	
-	shipyardByWaypointSymbol: Map<string, Shipyard> = new Map();
-	shipyardExpirationTimestampByWaypointSymbol: Map<string, number> = new Map();
-	shipyardsBySystemSymbol: Map<string, Shipyard[]> = new Map();
-	shipyardExpirationTime = 15 * 60 * 1000; // 15 minutes
+	onServerReset() {
+		this.allShipyardsSubject.next(null);
+		this.shipyardByWaypointSymbol = new Map<string, Shipyard>();
+		this.shipyardExpirationTimestampByWaypointSymbol = new Map<string, number>();
+		this.shipyardsBySystemSymbol = new Map<string, Shipyard[]>();
+	}
 
 	recordShipyard(Shipyard: Shipyard) {
 		const systemWaypointSymbol = Shipyard.symbol;

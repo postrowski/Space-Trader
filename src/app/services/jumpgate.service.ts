@@ -17,6 +17,9 @@ export class JumpgateService {
 
 	private allJumpgatesSubject = new BehaviorSubject<JumpGate[] | null>(null);
 	allJumpgates$: Observable<JumpGate[] | null> = this.allJumpgatesSubject.asObservable();
+	jumpgateByWaypointSymbol = new Map<string, JumpGate>();
+	jumpgatesBySystemSymbol = new Map<string, JumpGate[]>();
+	allConnectedWaypointSymbols = new Set<string>();
 
 	constructor(private http: HttpClient,
 				public galaxyService: GalaxyService,
@@ -31,9 +34,13 @@ export class JumpgateService {
 			});
 		});
 	}
-	jumpgateByWaypointSymbol: Map<string, JumpGate> = new Map();
-	jumpgatesBySystemSymbol: Map<string, JumpGate[]> = new Map();
-	allConnectedWaypointSymbols: Set<string> = new Set();
+	
+	onServerReset() {
+		this.allJumpgatesSubject.next(null);
+		this.jumpgateByWaypointSymbol = new Map<string, JumpGate>();
+		this.jumpgatesBySystemSymbol = new Map<string, JumpGate[]>();
+		this.allConnectedWaypointSymbols = new Set<string>();
+	}
 
 	recordJumpgate(jumpgate: JumpGate) {
 		const systemWaypointSymbol = jumpgate.symbol || '';

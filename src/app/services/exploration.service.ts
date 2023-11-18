@@ -16,8 +16,8 @@ import { ShipyardService } from './shipyard.service';
 })
 export class ExplorationService {
 
-	shipSymbolExploringBySystemSymbol: Map<string, string> = new Map();
-	explorationPathByShipSymbol: Map<string, string[]> = new Map();
+	shipSymbolExploringBySystemSymbol= new Map<string, string>();
+	explorationPathByShipSymbol = new Map<string, string[]>();
 	headquarters: System | null = null;
 	constructor(public marketService: MarketService,
 		public shipyardService: ShipyardService,
@@ -29,6 +29,11 @@ export class ExplorationService {
 				this.headquarters = this.galaxyService.getSystemBySymbol(agent.headquarters);
 			}
 		});
+	}
+	onServerReset() {
+		this.shipSymbolExploringBySystemSymbol = new Map<string, string>();
+		this.explorationPathByShipSymbol = new Map<string, string[]>();
+		this.headquarters = null;
 	}
 
 	getWaypointsNeedingToBeExplored(system: System): WaypointBase[] {

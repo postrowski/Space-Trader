@@ -61,7 +61,16 @@ export class FleetService implements OnInit {
 			}
 		})
 	}
-	            
+	
+	onServerReset() {
+		this.allShipsSubject.next([]);
+		this.activeShipSubject.next(null);
+		this.shipLocationsBySymbol = {};
+		this.shipLocationsSubject.next({});
+		this.surveysByWaypoint = {};
+		this.surveysByWaypointSubject.next({});
+	}
+	
 	// Add or update the location of a ship
 	setShipLocation(ship: Ship, system: string, loc: LocXY): void {
 		this.shipLocationsBySymbol[ship.symbol] = {system, loc};

@@ -26,7 +26,7 @@
 	<tr *ngFor="let agent of agents | sort:sortKey:sortDirection">
 		<td>{{agent.symbol}}</td>
 		<td>{{agent.headquarters}}</td>
-		<td>{{agent.credits}}</td>
+		<td class="numeric">{{agent.credits | currency : 'USD' : 'symbol' : '1.0-0'}}</td>
 		<td>{{agent.startingFaction}}</td>
 		<td>{{agent.shipCount}}</td>
 	</tr>

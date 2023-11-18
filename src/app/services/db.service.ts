@@ -37,7 +37,7 @@ export class DBService {
 			waypoints: 'symbol,systemSymbol',
 			agent: 'symbol',
 			jumplinks: 'fromSymbol',
-			marketItems: '[marketSymbol+symbol+tradeVolume+activity+supply+purchasePrice+sellPrice+type]',
+			marketItems: '[marketSymbol+symbol], timestamp',
 			shipyards: 'symbol',
 			jumpgates: 'symbol',
 			agents: '++id',
@@ -79,7 +79,12 @@ export class DBService {
 		// Explicitly resolve the promise when initialization is complete
   		return Promise.resolve();
 	}
-	
+	onServerReset() {
+		this.clearDataBase();
+		this.deleteDatabase();
+		this.initDatabase();
+	}
+
 	clearDataBase() {
 		// Clear all data from the 'systems' table
 		this.systems.clear();
@@ -167,27 +172,33 @@ export class DBService {
 		}
 	}
 	async addMarketItem(item: UiMarketItem): Promise<void> {
-		const existingItem = await this.marketItems
-			.where({
-				symbol: item.symbol,
-				type: item.type,
-				marketSymbol: item.marketSymbol,
-				tradeVolume: item.tradeVolume,
-				activity: item.activity,
-				supply: item.supply,
-				purchasePrice: item.purchasePrice,
-				sellPrice: item.sellPrice,
-			})
-			.first();
-
-		if (existingItem) {
-			// Item with the same properties exists, update timestamp
-			existingItem.timestamp = item.timestamp;
-			await this.marketItems.put(existingItem);
-		} else {
-			// No matching item found, add a new one
-			await this.marketItems.add(item);
-		}
+		await this.db.transaction('rw', this.marketItems, async () => {
+			const existingItems = await this.marketItems
+				.where({
+					symbol: item.symbol,
+					marketSymbol: item.marketSymbol,
+					})
+				.sortBy('timestamp');
+			let itemMatchedLastItem = false;
+			if (existingItems && existingItems.length > 0) {
+				const lastItem = existingItems[existingItems.length-1];
+				if (lastItem.type          === item.type          &&
+					lastItem.tradeVolume   === item.tradeVolume   &&
+					lastItem.activity      === item.activity      &&
+					lastItem.supply        === item.supply        &&
+					lastItem.purchasePrice === item.purchasePrice &&
+					lastItem.sellPrice     === item.sellPrice       ) {
+					// Item matched the most recent item with all the same properties, update its timestamp:
+					lastItem.timestamp = item.timestamp;
+					this.marketItems.put(lastItem);
+					itemMatchedLastItem = true;
+				}
+			}
+			if (!itemMatchedLastItem) {
+				// No matching item found, add a new one
+				this.marketItems.put(item);
+			}
+		});
 	}
 	addShipyard(shipyard: Shipyard) {
 		this.shipyards.put(shipyard, shipyard.symbol)

@@ -16,10 +16,6 @@ import { Agent } from 'src/models/Agent';
 export class GalaxyService {
     public apiUrlSystems = 'https://api.spacetraders.io/v2/systems';
 	pageSize = 20;
-
-	async addNewSystemDB(system: System) {
-		await this.dbService.createSystem(system);
-	}
 	
 	private activeSystemSubject = new BehaviorSubject<System | null>(null);
 	activeSystem$: Observable<System | null> = this.activeSystemSubject.asObservable();
@@ -31,6 +27,8 @@ export class GalaxyService {
 	public showGalaxy = false;
 	agent: Agent | null = null;
 	homeSystem: System | null = null;
+	loadingInProgress = false;
+	waypointPagesLoadedBySystemSymbol = new Map<string, Waypoint[]>();
 	
 	constructor(private http: HttpClient,
 				public accountService: AccountService,
@@ -50,6 +48,21 @@ export class GalaxyService {
 			}
 		});
 	}
+	
+	onServerReset() {
+		this.activeSystemSubject.next(null);
+		this.activeSystemWaypointSubject.next(null);
+		this.allSystems = [];
+		this.agent = null;
+		this.homeSystem = null;
+		this.loadingInProgress = false;
+		this.waypointPagesLoadedBySystemSymbol = new Map<string, Waypoint[]>();
+	}
+
+	async addNewSystemDB(system: System) {
+		await this.dbService.createSystem(system);
+	}
+	
 	setHomeSystem() {
 		if (this.agent?.headquarters && !this.homeSystem) {
 			this.homeSystem = this.getSystemBySymbol(this.agent?.headquarters);
@@ -151,8 +164,6 @@ export class GalaxyService {
 			}
 		}
 	}
-	loadingInProgress = false;
-	waypointPagesLoadedBySystemSymbol = new Map<string, Waypoint[]>();
 	getNextPageOfWaypoints() {
 		if (this.loadingInProgress) {
 			return;

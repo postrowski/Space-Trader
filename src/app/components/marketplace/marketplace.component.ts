@@ -217,10 +217,11 @@ export class MarketplaceComponent implements OnInit{
 	}
 
 	getYCoordinateActivity(activity: string) {
-		if (activity == 'STRONG') return 3;
-		if (activity == 'GROWING') return 2;
-		if (activity == 'STATIC') return 1;
-		if (activity == 'WEAK') return 0;
+		if (activity == 'STRONG') return 4;
+		if (activity == 'GROWING') return 3;
+		if (activity == 'STATIC') return 2;
+		if (activity == 'WEAK') return 1
+		if (activity == 'RESTRICTED') return 0;
 		return 0;
 	}
 	getYCoordinateSupply(supply: string) {
@@ -233,10 +234,11 @@ export class MarketplaceComponent implements OnInit{
 	}
 
 	getColorActivity(activity: string) {
-		if (activity == 'STRONG') return "gold";
+		if (activity == 'STRONG') return "white";
 		if (activity == 'GROWING') return "yellow";
-		if (activity == 'STATIC') return "blue";
-		if (activity == 'WEAK') return "red";
+		if (activity == 'STATIC') return "green";
+		if (activity == 'WEAK') return "blue";
+		if (activity == 'RESTRICTED') return "red";
 		return "red";
 	}
 									

@@ -20,6 +20,10 @@ export class ConstructionService {
 				public accountService: AccountService,
 				public fleetService: FleetService,
 	            public dbService: DBService) { }
+
+	onServerReset() {
+		this.constructionSiteSubject.next(null);
+	}
   
   	updateConstructionSite(constructionSite: ConstructionSite) {
 		this.constructionSiteSubject.next(constructionSite);

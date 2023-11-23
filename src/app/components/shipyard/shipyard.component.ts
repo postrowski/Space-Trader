@@ -20,7 +20,7 @@ import { ShipyardService } from 'src/app/services/shipyard.service';
 export class ShipyardComponent implements OnInit{
 	waypoint: WaypointBase | null = null;
 
-	shipyard?: Shipyard;
+	shipyard: Shipyard | null = null;
 	account: Agent | null = null;
 	shipsAtWaypoint: Ship[] = [];
 	constructor(public galaxyService: GalaxyService,
@@ -58,12 +58,16 @@ export class ShipyardComponent implements OnInit{
 	}
 
 	loadShipyard() {
-		this.shipyard = undefined;
+		this.shipyard = null;
 		if (this.waypoint && this.hasShipyard()) {
-			this.shipyardService.getShipyard(this.waypoint.symbol, this.shipsAtWaypoint.length > 0)
-			                    .subscribe((response) => {
-				this.shipyard = response;
-			});
+			if (this.shipsAtWaypoint.length > 0) {
+				this.shipyardService.getShipyard(this.waypoint.symbol)
+				                    .subscribe((response) => {
+					this.shipyard = response;
+				});
+			} else {
+				this.shipyard = this.shipyardService.getCachedShipyard(this.waypoint.symbol) || null;
+			}
 		}
 	}
 	loadShips() {

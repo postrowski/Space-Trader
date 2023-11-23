@@ -50,10 +50,12 @@ export class ExplorationService {
 		if (WaypointBase.hasMarketplace(waypoint) &&
 				!this.marketService.hasPriceData(waypoint.symbol)) {
 			return true;
-		}		
-		if (WaypointBase.hasShipyard(waypoint) &&
-				this.shipyardService.getCachedShipyard(waypoint.symbol, false) == null) {
-			return true;
+		}
+		if (WaypointBase.hasShipyard(waypoint)) {
+			const shipYard = this.shipyardService.getCachedShipyard(waypoint.symbol);
+			if (shipYard == null || shipYard.ships == null || shipYard.ships.length == 0) {
+				return true;
+			}
 		}
 		if (WaypointBase.isJumpGate(waypoint) &&
 				this.jumpgateService.getJumpgateBySymbol(waypoint.symbol) == null) {
@@ -281,4 +283,5 @@ export class ExplorationService {
 		}
 		return cost;
 	}
+	
 }

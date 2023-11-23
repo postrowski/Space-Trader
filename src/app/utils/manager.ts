@@ -56,7 +56,7 @@ export abstract class Manager {
 	removeBot(bot: Bot): boolean {
 		const index = this.shipBots.findIndex(b => b.ship.symbol === bot.ship.symbol);
 		if (index >= 0 && bot.manager == this) {
-			this.shipBots = this.shipBots.splice(index, 1);
+			this.shipBots.splice(index, 1);
 			bot.manager = null;
 			return true;
 		}
@@ -68,6 +68,21 @@ export abstract class Manager {
 	
 	abstract doStep(bot: Bot, system: System, waypoint: WaypointBase, credits: number): void;
 
+	static waypointsToExploreBySystemSymbol = new Map<string, WaypointBase[]>();
+	static getWaypointsToExplore(systemsBySymbol: Map<string, System | null>, bots: Bot[],
+	                             explorationService: ExplorationService) {
+		Manager.waypointsToExploreBySystemSymbol.clear();
+		const waypointSymbols = new Set<string> (bots.map(bot => bot.ship.nav.waypointSymbol));
+		const systemSymbols = [...waypointSymbols].map(waypointSymbol => GalaxyService.getSystemSymbolFromWaypointSymbol(waypointSymbol));
+		for (const systemSymbol of systemSymbols) {
+			const system = systemsBySymbol.get(systemSymbol);
+			if (system) {
+				const waypointsToExplore = explorationService.getWaypointsNeedingToBeExplored(system) || [];
+				Manager.waypointsToExploreBySystemSymbol.set(system.symbol, waypointsToExplore);
+			}
+		}
+	}
+	
 	step(systemsBySymbol: Map<string, System | null>,
          shipOperationBySymbol: Map<string, ExecutionStep>,
          activeShips: string[],
@@ -75,8 +90,9 @@ export abstract class Manager {
 		
 		this.contract = this.automationService.contract;
 		this.constructionSite = this.automationService.constructionSite;
-		
+	
 		for (const bot of this.shipBots) {
+			const stepStart = Date.now();
 			// See if this ship is ready and able to do something for this manager:
 			if (activeShips.length > 0 && !activeShips.includes(bot.ship.symbol)) {
 				continue;
@@ -105,9 +121,13 @@ export abstract class Manager {
 				continue;
 			}
 			// Do what ALL manager-controlled bots need to do
+			const stepCommonStart = Date.now();
 			this.doStepCommon(bot, system, waypoint, credits);
+			const stepSpecificStart = Date.now();
 			// Then so this specific manager needs to do.
 			this.doStep(bot, system, waypoint, credits);
+			const end = Date.now();
+			//console.log(`manager key ${this.key}, ship ${bot.ship.symbol}: prep took ${stepCommonStart - stepStart}, common took ${stepSpecificStart - stepCommonStart}, specific took ${end - stepSpecificStart}`)
 		}
 	}
 	
@@ -131,19 +151,19 @@ export abstract class Manager {
 		const hasUncharted   = WaypointBase.hasUncharted(waypoint);
 		const hasMarketplace = WaypointBase.hasMarketplace(waypoint);
 		let hasPriceData = hasMarketplace ? this.marketService.hasPriceData(waypoint.symbol) : false;
-		let shipyard = hasShipyard ? this.shipyardService.getCachedShipyard(waypoint.symbol, false) : null;
+		let shipyard = hasShipyard ? this.shipyardService.getCachedShipyard(waypoint.symbol) : null;
 		let jumpgate = isJumpgate ? this.jumpgateService.getJumpgateBySymbol(waypoint.symbol) : null;
 		const marketDataAge = hasPriceData ? this.marketService.lastUpdateDate(waypoint.symbol) : null;
 
-		const waypointsToExplore = this.explorationService.getWaypointsNeedingToBeExplored(system) || [];
 		// Update our local information, if needed
 		if (hasUncharted) {
 			bot.chart(waypoint);
 		}
+		const waypointsToExplore = Manager.waypointsToExploreBySystemSymbol.get(system.symbol);
 		if (hasMarketplace) {
 			// When we are exploring, always keep as full a fuel tank as possible,
 			// otherwise keep 40% in the tank
-			let minPercent = waypointsToExplore.length > 0 ? 95 : 40;
+			let minPercent = (waypointsToExplore && (waypointsToExplore.length > 0)) ? 95 : 40;
 			bot.refuel(minPercent);
 		}
 		const tooOld = Date.now() - 1000 * 60 * 5; // 5 minutes ago 
@@ -155,10 +175,9 @@ export abstract class Manager {
 			this.automationService.getMarketplaceForced(waypoint);
 		}
 		
-		if (hasShipyard && (shipyard == null)) {
-			// If this waypoint has a shipyard, but our cache is too old,
-			// update the cached shipyard:
-			this.automationService.getShipyard(waypoint, true);
+		if (hasShipyard && (shipyard?.ships == null || shipyard.ships.length == 0)) {
+			// If this waypoint has a shipyard, but no cache data, update the cached shipyard:
+			this.automationService.getShipyard(waypoint);
 		}
 		
 		if (isJumpgate && (jumpgate == null)) {
@@ -183,7 +202,16 @@ export abstract class Manager {
 		if (hasShipyard) {
 			this.automationService.buyShips(waypoint);
 		}
-		this.upgradeShipIfNeeded(bot, waypoint, credits);
+		// In 2.1, ship upgrades are not functional:
+		//this.upgradeShipIfNeeded(bot, waypoint, credits);
+	}
+	
+	otherShipsAtWaypoint(bot: Bot): Bot[] {
+		return this.shipBots.filter((otherBot) => {
+			return (bot.ship.symbol != otherBot.ship.symbol) && 
+					(otherBot.ship.nav.status !== 'IN_TRANSIT') && 
+					(bot.ship.nav.waypointSymbol == otherBot.ship.nav.waypointSymbol);
+		});
 	}
 	
 	upgradeShipIfNeeded(bot: Bot, waypoint: WaypointBase, credits: number) {
@@ -225,29 +253,20 @@ export abstract class Manager {
 	}
 	
 	sellAll(bot: Bot, waypoint: WaypointBase) {
-		bot.deliverAll(this.contract, this.constructionSite);
-		let inventory = [...bot.ship.cargo.inventory];
-		inventory = inventory.filter((inv) => inv.units > 0 &&
-		                             bot.canSellOrJettisonCargo(inv.symbol, this.contract, this.constructionSite));
-		inventory.sort((i1, i2) => {
-			if (i1.units < i2.units) return -1;
-			if (i1.units > i2.units) return 1;
-			return 0;
-		}).reverse();
-		for (const inv of inventory) {
-			const sellPlan = this.marketService.findBestMarketToSell(bot.ship, waypoint,
-			                                                         inv.symbol, inv.units, 0);
-			if (!sellPlan || sellPlan.profitPerSecond < 0) {
-				continue;
-			}
-			if (sellPlan.sellItem.marketSymbol == waypoint.symbol) {
-				bot.sellCargo(sellPlan.sellItem.symbol, inv.units);
-			} else {
-				const market = this.galaxyService.getWaypointByWaypointSymbol(sellPlan.sellItem.marketSymbol);
-				if (market) {
-					bot.navigateTo(market, sellPlan.travelSpeed,
-					               `Navigating to ${sellPlan.sellItem.marketSymbol} to sell ${sellPlan.sellItem.symbol}`);
+		bot.deliverAll(this.contract, this.constructionSite, true);
+		const sellPlan = this.marketService.findBestMarketToSellAll(bot.ship, waypoint, 0);
+		if (sellPlan) {
+			if (sellPlan.sellWaypoint.symbol == waypoint.symbol) {
+				for (const sellItem of sellPlan.sellItems) {
+					for (const inv of bot.ship.cargo.inventory.filter(i => i.symbol == sellItem.symbol)) {
+	                    if (bot.canSellOrJettisonCargo(inv.symbol, this.contract, this.constructionSite)) {
+							bot.sellCargo(inv.symbol, inv.units);
+						}
+					}
 				}
+			} else {
+				bot.navigateTo(sellPlan.sellWaypoint, sellPlan.route.steps[0].speed,
+				               `Navigating to ${sellPlan.sellWaypoint.symbol} to sell ${sellPlan.sellItems.map(i => i.symbol)}`);
 			}
 		}
 	}

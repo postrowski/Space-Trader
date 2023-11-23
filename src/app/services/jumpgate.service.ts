@@ -56,7 +56,7 @@ export class JumpgateService {
 			for (let existingJumpgate of jumpgatesInSystem) {
 				if (existingJumpgate.symbol == jumpgate.symbol) {
 					const index = jumpgatesInSystem.indexOf(existingJumpgate);
-					jumpgatesInSystem = jumpgatesInSystem.splice(index, 1);
+					jumpgatesInSystem.splice(index, 1);
 					this.jumpgatesBySystemSymbol.set(systemSymbol, jumpgatesInSystem);
 					break;
 				}

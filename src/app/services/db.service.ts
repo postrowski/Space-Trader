@@ -32,12 +32,12 @@ export class DBService {
 
 	public async initDatabase(): Promise<void> {
 		this.db = new Dexie('SpaceTraderDB');
-		this.db.version(2).stores({
+		this.db.version(4).stores({
 			systems: 'symbol, x, y',
 			waypoints: 'symbol,systemSymbol',
 			agent: 'symbol',
 			jumplinks: 'fromSymbol',
-			marketItems: '[marketSymbol+symbol], timestamp',
+			marketItems: '++,symbol,marketSymbol,[symbol+marketSymbol],timestamp',
 			shipyards: 'symbol',
 			jumpgates: 'symbol',
 			agents: '++id',
@@ -83,6 +83,7 @@ export class DBService {
 		this.clearDataBase();
 		this.deleteDatabase();
 		this.initDatabase();
+		// clear files from C:\Users\paul_\AppData\Local\Google\Chrome\User Data\Default\IndexedDB
 	}
 
 	clearDataBase() {
@@ -180,7 +181,7 @@ export class DBService {
 					})
 				.sortBy('timestamp');
 			let itemMatchedLastItem = false;
-			if (existingItems && existingItems.length > 0) {
+			if (existingItems && existingItems.length > 1) {
 				const lastItem = existingItems[existingItems.length-1];
 				if (lastItem.type          === item.type          &&
 					lastItem.tradeVolume   === item.tradeVolume   &&
@@ -201,6 +202,10 @@ export class DBService {
 		});
 	}
 	addShipyard(shipyard: Shipyard) {
+		if (shipyard.ships == null || shipyard.ships.length == 0) {
+			// Never store a shipyard that doesn't have price data:
+			return;
+		}
 		this.shipyards.put(shipyard, shipyard.symbol)
 			.then(() => {
 				console.log(`updated shipyard: ${shipyard.symbol}`);
@@ -210,20 +215,23 @@ export class DBService {
 			});
 	}
 	nextLogMessage = -1;
-	addLogMessage(message: LogMessage) {
-		if (this.nextLogMessage == -1) {
-			if (this.logs) {
-				this.logs.count().then((count)=> {this.nextLogMessage = count; this.addLogMessage(message);});
-			}
-			return;
-		}
-		message.id = this.nextLogMessage++;
-		this.logs.add(message)
-			.then(() => {
-			})
-			.catch((error) => {
-				console.error('Error adding log message:', error);
+	async addLogMessage(message: LogMessage) {
+		if (this.logs) {
+			await this.db.transaction('rw', this.logs, async () => {
+				if (this.nextLogMessage == -1) {
+					// Query Dexie to get the highest ID
+					const highestIdLog = await this.logs.orderBy('id').last();
+					this.nextLogMessage = highestIdLog ? highestIdLog.id + 1 : 1;
+				}
+				message.id = this.nextLogMessage++;
+				this.logs.add(message)
+					.then(() => {
+          			})
+					.catch((error) => {
+						console.error('Error adding log message:', error);
+					});
 			});
+		}
 	}
 	addJumpgate(jumpgate: JumpGate, symbol: string) {
 		// Check if the jumpgate with the same symbol exists

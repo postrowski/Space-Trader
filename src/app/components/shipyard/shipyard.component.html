@@ -17,7 +17,7 @@
 				<tr *ngFor="let transaction of shipyard.transactions">
 					<td>{{ transaction.waypointSymbol}}</td>
 					<td>{{ transaction.shipSymbol}}</td>
-					<td>{{ transaction.price}}</td>
+					<td>{{ transaction.price | currency : 'USD' : 'symbol' : '1.0-0'}}</td>
 					<td>{{ transaction.agentSymbol}}</td>
 					<td>{{ transaction.timestamp}}</td>
 				</tr>

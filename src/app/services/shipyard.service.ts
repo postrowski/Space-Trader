@@ -18,9 +18,7 @@ export class ShipyardService {
 	allShipyards$: Observable<Shipyard[] | null> = this.allShipyardsSubject.asObservable();
 	
 	shipyardByWaypointSymbol = new Map<string, Shipyard>();
-	shipyardExpirationTimestampByWaypointSymbol = new Map<string, number>();
 	shipyardsBySystemSymbol = new Map<string, Shipyard[]>();
-	shipyardExpirationTime = 15 * 60 * 1000; // 15 minutes
 
 	constructor(private http: HttpClient,
 				public galaxyService: GalaxyService,
@@ -38,7 +36,6 @@ export class ShipyardService {
 	onServerReset() {
 		this.allShipyardsSubject.next(null);
 		this.shipyardByWaypointSymbol = new Map<string, Shipyard>();
-		this.shipyardExpirationTimestampByWaypointSymbol = new Map<string, number>();
 		this.shipyardsBySystemSymbol = new Map<string, Shipyard[]>();
 	}
 
@@ -56,7 +53,7 @@ export class ShipyardService {
 			for (let existingShipyard of shipyardsInSystem) {
 				if (existingShipyard.symbol == Shipyard.symbol) {
 					const index = shipyardsInSystem.indexOf(existingShipyard);
-					shipyardsInSystem = shipyardsInSystem.splice(index, 1);
+					shipyardsInSystem.splice(index, 1);
 					this.shipyardsBySystemSymbol.set(systemSymbol, shipyardsInSystem);
 					break;
 				}
@@ -66,26 +63,11 @@ export class ShipyardService {
 	}
 	
 	
-	getCachedShipyard(systemWaypointSymbol:string, considerExpiration: boolean): Shipyard | null{
-		if (considerExpiration) {
-			const marketExpirationTimestamp = this.shipyardExpirationTimestampByWaypointSymbol.get(systemWaypointSymbol);
-			if (!marketExpirationTimestamp || marketExpirationTimestamp < Date.now()) {
-				return null;
-			}
-		}
+	getCachedShipyard(systemWaypointSymbol:string): Shipyard | null{
 		return this.shipyardByWaypointSymbol.get(systemWaypointSymbol) || null;
 	}
 	
-	getShipyard(systemWaypointSymbol:string, shipsAtWaypoint: boolean) : Observable<Shipyard> {
-		const shipyard = this.shipyardByWaypointSymbol.get(systemWaypointSymbol);
-		const shipyardExpirationTimestamp = this.shipyardExpirationTimestampByWaypointSymbol.get(systemWaypointSymbol);
-		if (shipyard && 
-		    shipyardExpirationTimestamp && shipyardExpirationTimestamp > Date.now() && 
-	     	(!shipsAtWaypoint || (shipyard.ships && shipyard.ships.length > 0))) {
-			// If the Shipyard is already cached, and not expired, return it as an observable
-    		return of(shipyard);
-		}
-		
+	getShipyard(systemWaypointSymbol:string) : Observable<Shipyard> {
 		const headers = this.accountService.getHeader();
 		const systemSymbol = GalaxyService.getSystemSymbolFromWaypointSymbol(systemWaypointSymbol);
 		
@@ -94,8 +76,6 @@ export class ShipyardService {
 			.pipe(map((response: any) => response.data as Shipyard)) // Extract 'data' as Shipyard
       		.pipe(shareReplay(1)); // Use the shareReplay operator so our service can subscribe, and so can the caller
 		observable.subscribe((Shipyard)=> {
-			this.shipyardExpirationTimestampByWaypointSymbol.set(systemWaypointSymbol,
-			                                                   Date.now() + this.shipyardExpirationTime);
 			this.recordShipyard(Shipyard);
 			this.dbService.addShipyard(Shipyard);
 		}, (error) => {});
@@ -111,6 +91,23 @@ export class ShipyardService {
 			}
 			// TODO: if multiple shipyards in a single system, find the closest one.
 			return this.shipyardByWaypointSymbol.get(shipyardSymbol) || null;
+		}
+		return null;
+	}
+	findNearestShipyardSellingShip(waypoint: WaypointBase, shipType: string): Shipyard | null {
+		const systemSymbol = waypoint ? GalaxyService.getSystemSymbolFromWaypointSymbol(waypoint.symbol) : null;
+		for (let shipyardSymbol of this.shipyardsBySystemSymbol.keys()) {
+			// Only look within the system of the current ship
+			if (systemSymbol && !shipyardSymbol.startsWith(systemSymbol)) {
+				continue;
+			}
+			// TODO: if multiple shipyards in a single system, find the closest one.
+			const shipyard = this.shipyardByWaypointSymbol.get(shipyardSymbol) || null;
+			for (const type of shipyard?.shipTypes || []) {
+				if (type.type == shipType) {
+					return shipyard;
+				}
+			}
 		}
 		return null;
 	}

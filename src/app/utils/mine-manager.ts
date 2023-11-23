@@ -24,7 +24,7 @@ export class MineManager extends Manager {
 		if (super.removeBot(bot)) {
 			const index = this.haulerBots.findIndex(b => b.ship.symbol === bot.ship.symbol);
 			if (index >= 0) {
-				this.haulerBots = this.haulerBots.splice(index, 1);
+				this.haulerBots.splice(index, 1);
 			}
 			return true;
 		}
@@ -42,11 +42,7 @@ export class MineManager extends Manager {
 			bot.refineAll();
 		}
 		
-		const otherShipsAtWaypoint = this.shipBots.filter((otherBot) => {
-			return (bot.ship.symbol != otherBot.ship.symbol) && 
-					(otherBot.ship.nav.status !== 'IN_TRANSIT') && 
-					(bot.ship.nav.waypointSymbol == otherBot.ship.nav.waypointSymbol);
-		});
+		const otherShipsAtWaypoint = this.otherShipsAtWaypoint(bot);
 
 		if (bot.ship.nav.status === 'DOCKED' && hasMarketplace) {
 			// If we are already docked at a marketplace, sell everything we've got:

@@ -50,13 +50,15 @@
 					</td>
 				</tr>
 			</table>
-			<div class="droppable-area jettisonCargoSpot" cdkDropList
-				(cdkDropListDropped)="onDropJettison($event)">
-				<img src="assets/Trash.png">Jettison
-			</div>
+			<br/>
 			<div class="droppable-area sellCargoSpot" cdkDropList
 			     *ngIf="showSell == 'true'" (cdkDropListDropped)="onDropSell($event)">
-				$ Sell
+				<img src="assets/Sell.png"><span style="font-size: x-large">Sell</span>
+			</div>
+			<br/>
+			<div class="droppable-area jettisonCargoSpot" cdkDropList
+				(cdkDropListDropped)="onDropJettison($event)">
+				<img src="assets/Trash.png"><span style="font-size: x-large">Jettison</span>
 			</div>
 		</div>
 	</div>

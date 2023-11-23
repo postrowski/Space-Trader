@@ -33,7 +33,7 @@ export class MarketService {
 				public dbService: DBService,
 				public accountService: AccountService) {
 	    this.dbService.initDatabase().then(() => {
-			liveQuery(() => this.dbService.marketItems.toArray()).subscribe((response) => {
+			liveQuery(() => this.dbService.marketItems.orderBy('timestamp').toArray()).subscribe((response) => {
 				this.addToMarketItems(response);
 			});
 	    });
@@ -97,19 +97,27 @@ export class MarketService {
 			while (marketItems.length > 0 && marketItems[0].purchasePrice == 0) {
 				marketItems.shift();
 			}
-			const previousMarketItem = this.getMostRecentItem(marketItems);
-			if (previousMarketItem) {
-				if (previousMarketItem.marketSymbol == marketItem.marketSymbol &&
-				    previousMarketItem.purchasePrice == marketItem.purchasePrice &&
-				    previousMarketItem.sellPrice == marketItem.sellPrice&&
-				    previousMarketItem.supply == marketItem.supply&&
-				    previousMarketItem.symbol == marketItem.symbol&&
-				    previousMarketItem.type == marketItem.type) {
-					// This new item is identical (except possibly the timestamp) as the previous record.
-					// rather than increasing the record count, just update the timestamp
-					console.log(`Duplicate MarketItem found ${marketItem.marketSymbol} ${marketItem.symbol}, updating timestamp only`);
-					previousMarketItem.timestamp = marketItem.timestamp;
-					continue;
+			// When the new value comes in, and it matches the most recent item,
+			// but that item is NOT the only item in the list, update its timestamp.
+			// If it is the only item in the list (marketItems.length==1), leave it alone as its the first item in history
+			if (marketItems.length > 1) {
+				const previousMarketItem = this.getMostRecentItem(marketItems);
+				if (previousMarketItem) {
+					if (previousMarketItem.marketSymbol == marketItem.marketSymbol &&
+					    previousMarketItem.purchasePrice == marketItem.purchasePrice &&
+					    previousMarketItem.sellPrice == marketItem.sellPrice&&
+					    previousMarketItem.supply == marketItem.supply&&
+					    previousMarketItem.symbol == marketItem.symbol&&
+					    previousMarketItem.type == marketItem.type) {
+						// This new item is identical (except possibly the timestamp) as the previous record.
+						// rather than increasing the record count, just update the timestamp
+						if (previousMarketItem.timestamp.getTime() != marketItem.timestamp.getTime()) {
+							const diff = marketItem.timestamp.getTime() - previousMarketItem.timestamp.getTime();
+							console.log(`Duplicate MarketItem found ${marketItem.marketSymbol} ${marketItem.symbol}, updating timestamp only (delta ${diff/1000} secs)`);
+							previousMarketItem.timestamp = marketItem.timestamp;
+						}
+						continue;
+					}
 				}
 			}
 			marketItems.push(marketItem);
@@ -155,10 +163,11 @@ export class MarketService {
 	}
 
 
-	refuelShip(shipSymbol: string, units: number): Observable<{ data: {agent: Agent; fuel: ShipFuel; transaction: MarketTransaction }}> {
+	refuelShip(shipSymbol: string, units: number, fromCargo: boolean): Observable<{ data: {agent: Agent; fuel: ShipFuel; transaction: MarketTransaction }}> {
 		const headers = this.accountService.getHeader();
 		const body = {
-			units: units
+			units: units,
+			fromCargo: fromCargo
 		}
 		const observable = this.http.post<{ data: {agent: Agent; fuel: ShipFuel; transaction: MarketTransaction }}>
 			(`${this.apiUrlMyShips}/${shipSymbol}/refuel`,
@@ -406,18 +415,19 @@ export class MarketService {
 			}
 			const itemPricesByMarket: Map<string, UiMarketItem> = this.getPricesForItemInSystemByWaypointSymbol(waypoint.symbol, tradeSymbol);
 			const purchaseItem = itemPricesByMarket.get(waypoint.symbol);
-			if (purchaseItem) {
+			if (purchaseItem && purchaseItem.purchasePrice > 0) {
 				const units = Math.min(cargoCapacity, Math.floor(creditsAvailable / purchaseItem.purchasePrice));
 				if (units > 0) {
 					const cost = purchaseItem.purchasePrice * units;
-					const sellPlan: SellPlan | null = this.findBestMarketToSell(ship, waypoint, tradeSymbol, units, cost);
-					if (sellPlan && sellPlan.sellItem.marketSymbol != waypoint.symbol) {
+					const sellPlan: SellPlan | null = this.findBestMarketToSell(ship, waypoint, purchaseItem.symbol, units, cost);
+					if (sellPlan && sellPlan.sellItems[0].marketSymbol != waypoint.symbol) {
 						const route: TradeRoute = {
 							startingWaypoint: waypoint,
+							sellWaypoint: sellPlan.sellWaypoint,
 							buyItem: purchaseItem,
-							sellItem: sellPlan.sellItem,
+							sellItems: sellPlan.sellItems,
 							profit: sellPlan.profit, // - cost,
-							travelSpeed: sellPlan.travelSpeed,
+							route: sellPlan.route,
 							travelTime: sellPlan.travelTime,
 							profitPerSecond: sellPlan.profitPerSecond //(sellPlan.profit - cost) / sellPlan.travelTime
 						};
@@ -448,26 +458,135 @@ export class MarketService {
 				if ((distToMarket == 0) && (waypoint.symbol != market.symbol)) {
 					distToMarket = 1;
 				}
-				
-				for (const travelSpeed of ['DRIFT', 'CRUISE', 'BURN']) {
-					const fuelUsed = Ship.getFuelUsed(ship, travelSpeed, distToMarket);
-					if (fuelUsed > ship.fuel.capacity) {
-						continue;
-					}
-					const profit = sellItem.sellPrice * unitsToSell - costBasis - fuelUsed * bestFuelCost * 2; // use round-trip fuel cost
-					const travelTime = Ship.getTravelTime(ship, travelSpeed, distToMarket);
-					const profitPerSecond = profit / travelTime;
+
+				const routes = this.getRouteOptions(waypoint, market, ship.fuel.current, ship);				
+				for (const route of routes) {
+					const profit = sellItem.sellPrice * unitsToSell - costBasis - route.fuel * bestFuelCost * 2; // use round-trip fuel cost
+					const profitPerSecond = profit / route.time;
 					
 					if (profit > 0 && ((best == null) || (profitPerSecond > best.profitPerSecond))) {
 						best = {
-							startingWaypoint: waypoint,
-							sellItem, profitPerSecond, profit, travelSpeed, travelTime};
+							startingWaypoint: waypoint, sellWaypoint: market, sellItems: [sellItem],
+							profitPerSecond, profit, route, travelTime: route.time};
 					}
 				}
 			}
 		}
 		return best;
 	}
+	
+	findBestMarketToSellAll(ship: Ship, waypoint: WaypointBase, costBasis: number): SellPlan | null {
+		const fuelPrices: Map<string, UiMarketItem> = this.getPricesForItemInSystemByWaypointSymbol(waypoint.symbol, 'FUEL');
+		const fuelCostLocal = fuelPrices.get(waypoint.symbol)?.purchasePrice || Infinity;
+		let best: SellPlan | null = null;
+		
+		const marketSymbols: Set<string> | undefined = this.marketSymbolsBySystemSymbol.get(GalaxyService.getSystemSymbolFromWaypointSymbol(waypoint.symbol));
+		for (const marketSymbol of marketSymbols || []) {
+			const market = this.galaxyService.getWaypointByWaypointSymbol(marketSymbol);
+			const marketItemsByTradeSymbol = this.marketItemsByTradeSymbolByWaypointSymbol.get(marketSymbol);
+			if (marketItemsByTradeSymbol && market) {
+				let proceedsAtMarket = 0;
+				const marketSellItems: UiMarketItem[] = [];
+				for (const inv of ship.cargo.inventory) {
+					const marketItems = marketItemsByTradeSymbol.get(inv.symbol);
+					const marketItem = this.getMostRecentItem(marketItems);
+					if (marketItem) {
+						proceedsAtMarket += marketItem.sellPrice * inv.units;
+						marketSellItems.push(marketItem);
+					}
+				}
+				// get fuel and distance to this market
+				const fuelItems = marketItemsByTradeSymbol.get('FUEL');
+				let distToMarket = LocXY.getDistance(market, waypoint);
+				if ((distToMarket == 0) && (waypoint.symbol != market.symbol)) {
+					distToMarket = 1;
+				}
+				const fuelCostAtMarket = this.getMostRecentItem(fuelItems)?.purchasePrice || Infinity;;
+				let bestFuelCost = Math.min(fuelCostAtMarket, fuelCostLocal, this.getAverageFuelCost(marketSymbol));
+				
+				const routes = this.getRouteOptions(waypoint, market, ship.fuel.current, ship);				
+				for (const route of routes) {
+					const profit = proceedsAtMarket - costBasis - route.fuel * bestFuelCost * 2; // use round-trip fuel cost
+					const profitPerSecond = profit / route.time;
+					
+					if (profit > 0 && ((best == null) || (profitPerSecond > best.profitPerSecond))) {
+						best = {
+							startingWaypoint: waypoint, sellWaypoint: market, sellItems: marketSellItems,
+							profitPerSecond, profit, route, travelTime: route.time};
+					}
+				}
+			}
+		}
+		return best;
+	}
+	
+	getRouteOptions(fromWaypoint: WaypointBase, toWaypoint: WaypointBase, currentFuel: number, ship: Ship): Route[] {
+		const path = [];
+		if (fromWaypoint.symbol == toWaypoint.symbol) {
+			path.push({steps: [], time: 1, fuel: 0});
+		} else {
+			const system = this.galaxyService.getSystemBySymbol(fromWaypoint.symbol);
+			if (system && system.waypoints) {
+				const fuelPricesByWaypointSymbol = this.getPricesForItemInSystemByWaypointSymbol(system.symbol, 'FUEL');
+				const hasFuelStation = fuelPricesByWaypointSymbol.has(fromWaypoint.symbol);
+				for (const speed of ['BURN', 'CRUISE', 'DRIFT']) {
+					const dist = LocXY.getDistance(fromWaypoint, toWaypoint);
+					const time = Ship.getTravelTime(ship, speed, dist);
+					const fuel = Ship.getFuelUsed(ship, speed, dist);
+					if (hasFuelStation) {
+						// allow a refuel
+						currentFuel = ship.fuel.capacity;
+					}
+					if (fuel < currentFuel) {
+						path.push({steps:[{loc: toWaypoint, speed}], time, fuel});
+					} else {
+						// Try to find the furthest distance we can go, that is closest to the destination:
+						const fuelWaypoints = system.waypoints.filter((wp) => fuelPricesByWaypointSymbol.has(wp.symbol));
+						let maxFuel = currentFuel;
+						if (hasFuelStation) {
+							maxFuel = ship.fuel.capacity;
+						}
+						const maxRange = maxFuel * (dist / fuel);
+						const fuelWaypointsInRange = fuelWaypoints.filter((wp) => LocXY.getDistance(fromWaypoint, wp) < maxRange);
+						if (fuelWaypointsInRange.length > 0) {
+							fuelWaypointsInRange.push(fromWaypoint);
+							const fuelStationsNearestToDest = ExplorationService.sortWaypointsByDistanceFrom(fuelWaypointsInRange, toWaypoint);
+							while (fuelStationsNearestToDest.length > 0) {
+								const fuelStationNearestToDest = fuelStationsNearestToDest.shift();
+								if (fuelStationNearestToDest) {
+									// make sure we are actually getting closer to our destination:
+									const newDist = LocXY.getDistance(fuelStationNearestToDest, toWaypoint);
+									const newTime = Ship.getTravelTime(ship, speed, newDist);
+									const newFuel = Ship.getFuelUsed(ship, speed, newDist);
+									if (newDist < dist && newFuel < currentFuel ) {
+										const nextLegOptions = this.getRouteOptions(fuelStationNearestToDest, toWaypoint, currentFuel - fuel, ship);
+										for (const nextLegOption of nextLegOptions) {
+											path.push({
+												steps:[{
+													loc: fuelStationNearestToDest, speed}, ...nextLegOption.steps],
+												time: newTime + nextLegOption.time,
+												fuel: newFuel + nextLegOption.fuel});
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+		return path;
+	}
+}
+
+export class RouteStep {
+ 	loc!: WaypointBase;
+ 	speed!: string;
+}
+export class Route 	{
+	steps!: RouteStep[];
+	time!: number;
+	fuel!: number
 }
 
 export class UiMarketItem extends MarketTradeGood {
@@ -494,9 +613,10 @@ export class UiMarket {
 
 export class SellPlan {
 	startingWaypoint!: WaypointBase;
-	sellItem!: UiMarketItem;
+	sellWaypoint!: WaypointBase;
+	sellItems!: UiMarketItem[];
 	profit!: number;
-	travelSpeed!: string;
+	route!: Route
 	travelTime!: number;
 	profitPerSecond!: number;
 };

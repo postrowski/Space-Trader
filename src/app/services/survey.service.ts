@@ -23,7 +23,9 @@ export class SurveyService {
 	deleteSurvey(survey: Survey) {
 		const index = this.allSurveysSubject.value.indexOf(survey);
 		if (index != -1) {
-			this.allSurveysSubject.value.splice(index, 1);
+		    const currentSurveys = this.allSurveysSubject.value.slice();
+		    currentSurveys.splice(index, 1);
+		    this.allSurveysSubject.next(currentSurveys);
 			if (survey == this.selectedSurvey) {
 				this.selectedSurvey = null;
 			}
@@ -32,7 +34,8 @@ export class SurveyService {
 
 	addSurvey(survey: Survey) {
 		this.startTimeBySurvey.set(survey, new Date().toISOString());
-		this.allSurveysSubject.value.push(survey);
+	    const updatedSurveys = [...this.allSurveysSubject.value, survey];
+	    this.allSurveysSubject.next(updatedSurveys);
 		this.expireSurveys();
 	}
 

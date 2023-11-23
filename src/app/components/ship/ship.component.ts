@@ -68,7 +68,14 @@ export class ShipComponent implements OnInit {
 	}
 	onRefuel(ship: Ship) {
 		if (ship != null) {
-			this.marketService.refuelShip(ship.symbol, ship.fuel.capacity - ship.fuel.current)
+			this.marketService.refuelShip(ship.symbol, ship.fuel.capacity - ship.fuel.current, false)
+							  .subscribe((response) => {
+							  			 });
+		}
+	}
+	onRefuelFromCargo(ship: Ship) {
+		if (ship != null) {
+			this.marketService.refuelShip(ship.symbol, ship.fuel.capacity - ship.fuel.current, true)
 							  .subscribe((response) => {
 							  			 });
 		}

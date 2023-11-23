@@ -10,18 +10,72 @@ import { ShipReactor } from "./ShipReactor";
 import { ShipEngine } from "./ShipEngine";
 import { ShipCargo } from "./ShipCargo";
 
-export class Ship {
-	// elements that are nullable don't exist on ShipyardShips
-	symbol: string = "";
-	nav: ShipNav = new ShipNav();
-	crew: ShipCrew = new ShipCrew();
-	cooldown: Cooldown = new Cooldown();
-	fuel: ShipFuel = new ShipFuel();
+export class ShipBase  {
 	frame: ShipFrame = new ShipFrame();
 	reactor: ShipReactor = new ShipReactor();
 	engine: ShipEngine = new ShipEngine();
 	modules: ShipModule[] = [];
 	mounts: ShipMount[] = [];
+	crew: ShipCrew = new ShipCrew();
+
+	public static containsModule(ship: ShipBase, moduleStr: string): boolean {
+		if (ship) {
+			for (let module of ship.modules) {
+				if (module.symbol.startsWith(moduleStr)) {
+					return true;
+				}
+			}
+		}
+		return false;
+	}
+	public static containsMount(ship: ShipBase, mountStr: string): boolean {
+		if (ship) {
+			for (let mount of ship.mounts) {
+				if (mount.symbol.startsWith(mountStr)) {
+					return true;
+				}
+			}
+		}
+		return false;
+	}
+	public static getPowerAvailable(ship: ShipBase) {
+		let power = ship.reactor.powerOutput;
+		for (let mount of ship.mounts) {
+			power -= mount.requirements?.power || 0;
+		}
+		for (let module of ship.modules) {
+			power -= module.requirements?.power || 0;
+		}
+		power -= ship.engine.requirements?.power || 0;
+		power -= ship.frame.requirements?.power || 0;
+		return power;
+	}
+
+	public static getCrewAvailable(ship: ShipBase) {
+		return ship.crew.capacity - ship.crew.required;
+	}
+
+	public static getTravelTime(ship: ShipBase, travelSpeed: string, dist: number) {
+		let mult = 1000;
+		if (travelSpeed == 'DRIFT') mult = 250;
+		else if (travelSpeed == 'CRUISE')  mult = 25;
+		else if (travelSpeed == 'BURN')    mult = 12.5;
+		else if (travelSpeed == 'STEALTH') mult = 30;
+		return Math.floor(Math.round(Math.max(1, dist)) * mult / ship.engine.speed) + 15;
+	}
+	public static getFuelUsed(ship: ShipBase, travelSpeed: string, dist: number) {
+		if (travelSpeed == 'DRIFT') return 1;
+		if (travelSpeed == 'BURN') return 2*dist;
+		return dist;
+	}
+}
+
+export class Ship extends ShipBase {
+	// elements that are nullable don't exist on ShipyardShips
+	symbol: string = "";
+	nav: ShipNav = new ShipNav();
+	cooldown: Cooldown = new Cooldown();
+	fuel: ShipFuel = new ShipFuel();
 	registration: ShipRegistration = new ShipRegistration();
 	cargo: ShipCargo = new ShipCargo();
 
@@ -38,57 +92,6 @@ export class Ship {
 		this.mounts = src.mounts;
 		this.registration.update(src.registration);
 		this.cargo = src.cargo;
-	}
-	
-	public static containsModule(ship: Ship, moduleStr: string): boolean {
-		if (ship) {
-			for (let module of ship.modules) {
-				if (module.symbol.startsWith(moduleStr)) {
-					return true;
-				}
-			}
-		}
-		return false;
-	}
-	public static containsMount(ship: Ship, mountStr: string): boolean {
-		if (ship) {
-			for (let mount of ship.mounts) {
-				if (mount.symbol.startsWith(mountStr)) {
-					return true;
-				}
-			}
-		}
-		return false;
-	}
-	public static getPowerAvailable(ship: Ship) {
-		let power = ship.reactor.powerOutput;
-		for (let mount of ship.mounts) {
-			power -= mount.requirements?.power || 0;
-		}
-		for (let module of ship.modules) {
-			power -= module.requirements?.power || 0;
-		}
-		power -= ship.engine.requirements?.power || 0;
-		power -= ship.frame.requirements?.power || 0;
-		return power;
-	}
-
-	public static getCrewAvailable(ship: Ship) {
-		return ship.crew.capacity - ship.crew.required;
-	}
-
-	public static getTravelTime(ship: Ship, travelSpeed: string, dist: number) {
-		let mult = 1000;
-		if (travelSpeed == 'DRIFT') mult = 250;
-		else if (travelSpeed == 'CRUISE')  mult = 25;
-		else if (travelSpeed == 'BURN')    mult = 7.5;
-		else if (travelSpeed == 'STEALTH') mult = 30;
-		return Math.floor(Math.round(Math.max(1, dist)) * mult / ship.engine.speed) + 15;
-	}
-	public static getFuelUsed(ship: Ship, travelSpeed: string, dist: number) {
-		if (travelSpeed == 'DRIFT') return 1;
-		if (travelSpeed == 'BURN') return 2*dist;
-		return dist;
 	}
 }
 

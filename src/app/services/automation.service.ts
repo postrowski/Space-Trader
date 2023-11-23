@@ -3,7 +3,6 @@ import { BehaviorSubject, Observable } from 'rxjs';
 import { Agent } from 'src/models/Agent';
 import { Contract } from 'src/models/Contract';
 import { Ship } from 'src/models/Ship';
-import { ShipType } from 'src/models/ShipType';
 import { Shipyard } from 'src/models/Shipyard';
 import { System } from 'src/models/System';
 import { WaypointBase} from 'src/models/WaypointBase';
@@ -26,6 +25,7 @@ import { TradeManager } from '../utils/trade-manager';
 import { MineManager } from '../utils/mine-manager';
 import { Manager } from '../utils/manager';
 import { PairManager } from '../utils/pair-manager';
+import { ShipyardShip } from 'src/models/ShipyardShip';
 
 @Injectable({
 	providedIn: 'root'
@@ -162,7 +162,8 @@ export class AutomationService {
 			}
 			this.onServerReset();
 		}
-		if (message.includes("insufficient funds")) {
+		if (message.includes("insufficient funds") ||
+		    message.includes("agent does not have sufficient credits to purchase")) {
 			this.refreshAgent = true;
 		}
 		if (message.includes("ship is not currently ")) { // "...in orbit" or "...docked"
@@ -310,11 +311,20 @@ export class AutomationService {
 						this.marketManager.addBot(bot);
 					} else if ((bot.role == Role.Miner || bot.role == Role.Siphon) && this.mineManager) {
 						this.mineManager.addBot(bot);
-					} else if (this.tradeManager && this.mineManager) {
+					} else if (bot.role == Role.Surveyor) {
+						for (const pairManager of this.pairManagers) {
+							if (pairManager.surveyBot == null && pairManager.role == Role.Miner) {
+								this.addMessage(bot.ship, `Pairing surveyor ship ${bot.ship.symbol} with pair ${pairManager.key}`);
+								pairManager.addBot(bot);
+								break;
+							}
+						}
+					} else if (this.tradeManager) {
 						this.tradeManager.addBot(bot);
 					}
+					
 					if (this.mineManager && this.tradeManager && 
-						this.tradeManager.shipBots.length > 1 &&
+						this.tradeManager.shipBots.length > 3 &&
 						this.mineManager.shipBots.length > 0) {
 						const mineBot = this.mineManager.shipBots[this.mineManager.shipBots.length-1];
 						const tradeBot = this.tradeManager.shipBots[this.tradeManager.shipBots.length-1];
@@ -325,7 +335,7 @@ export class AutomationService {
 								if (pairManager.addBot(mineBot!) && pairManager.addBot(tradeBot!)) {
 									this.pairManagers.push(pairManager);
 									this.managers.push(pairManager);
-									this.addMessage(tradeBot!.ship, `Pairing hauler ship ${tradeBot!.ship.symbol} with miner ${mineBot!.ship.symbol}`);
+									this.addMessage(tradeBot!.ship, `Pairing hauler ship ${tradeBot!.ship.symbol} with miner ${mineBot!.ship.symbol} in pair ${pairManager.key}`);
 									fail = false;
 								} else {
 									pairManager.removeBot(tradeBot);
@@ -366,6 +376,8 @@ export class AutomationService {
 					throw `waiting for DB to get system ${systemSymbol}`;
 				}
 			}
+			
+			Manager.getWaypointsToExplore(this.systemsBySymbol, this.shipBots, this.explorationService);
 
 			for (const manager of this.managers) {
 				executionStep.manager = manager.key;
@@ -418,20 +430,18 @@ export class AutomationService {
 		return fastestShip;
 	}
 			
-	getShipyard(waypoint: WaypointBase, shipsAtWaypoint: boolean) {
+	getShipyard(waypoint: WaypointBase) {
 		if (!WaypointBase.hasShipyard(waypoint)) {
 			return;
 		}
-		if (this.shipyardService.getCachedShipyard(waypoint.symbol, false) == null) {
-			const step = new ExecutionStep(null, `getting shipyard`, 'yard');
-			this.shipyardService.getShipyard(waypoint.symbol, shipsAtWaypoint)
-			                    .subscribe((response) => {
+		const step = new ExecutionStep(null, `getting shipyard`, 'yard');
+		this.shipyardService.getShipyard(waypoint.symbol)
+			.subscribe((response) => {
 				this.completeStep(step);
 			}, (error) => {
 				this.onError(error, step);
 			});
-			throw step;
-		}
+		throw step;
 	}
 	doRefreshAgent() {
 		const step = new ExecutionStep(null, `refreshing agent`, 'agent');
@@ -543,97 +553,79 @@ export class AutomationService {
 	}
 
 
-	shipTypeMap: Map<ShipType, string> = new Map([
-		[ShipType.SHIP_PROBE,               'FRAME_PROBE'],
-		[ShipType.SHIP_MINING_DRONE,        'FRAME_DRONE'],
-		[ShipType.SHIP_INTERCEPTOR,         'FRAME_INTERCEPTOR'],
-	    [ShipType.SHIP_LIGHT_HAULER,        'FRAME_LIGHT_HAULER'],
-	    [ShipType.SHIP_COMMAND_FRIGATE,     'FRAME_FRIGATE'],
-	    [ShipType.SHIP_EXPLORER,            'FRAME_EXPLORER'],
-	    [ShipType.SHIP_HEAVY_FREIGHTER,     'FRAME_HEAVY_FREIGHTER'],
-	    [ShipType.SHIP_LIGHT_SHUTTLE,       'FRAME_SHUTTLE'],
-	    [ShipType.SHIP_ORE_HOUND,           'FRAME_MINER'],
-	    [ShipType.SHIP_REFINING_FREIGHTER,  'FRAME_LIGHT_FREIGHTER'],
-	    ]);
-	getShipTypeToBuy(shipyard: Shipyard): ShipType | null {
-		const idealFleet: ShipType[] = [];
-		idealFleet.push(ShipType.SHIP_COMMAND_FRIGATE);
-		idealFleet.push(ShipType.SHIP_PROBE);
-		idealFleet.push(ShipType.SHIP_ORE_HOUND);
-		idealFleet.push(ShipType.SHIP_ORE_HOUND);
-		idealFleet.push(ShipType.SHIP_ORE_HOUND);// 5
-		idealFleet.push(ShipType.SHIP_ORE_HOUND);
-		idealFleet.push(ShipType.SHIP_ORE_HOUND);
-		idealFleet.push(ShipType.SHIP_ORE_HOUND);
-		idealFleet.push(ShipType.SHIP_ORE_HOUND);
-		idealFleet.push(ShipType.SHIP_HEAVY_FREIGHTER); //10
-		idealFleet.push(ShipType.SHIP_ORE_HOUND);
-		idealFleet.push(ShipType.SHIP_ORE_HOUND);
-		idealFleet.push(ShipType.SHIP_ORE_HOUND);
-		idealFleet.push(ShipType.SHIP_ORE_HOUND);
-		idealFleet.push(ShipType.SHIP_HEAVY_FREIGHTER); //15
-		idealFleet.push(ShipType.SHIP_ORE_HOUND);
-		idealFleet.push(ShipType.SHIP_ORE_HOUND);
-		idealFleet.push(ShipType.SHIP_ORE_HOUND);
-		idealFleet.push(ShipType.SHIP_ORE_HOUND);
-		idealFleet.push(ShipType.SHIP_REFINING_FREIGHTER); // 20
-		idealFleet.push(ShipType.SHIP_ORE_HOUND);
-		idealFleet.push(ShipType.SHIP_ORE_HOUND);
-		idealFleet.push(ShipType.SHIP_ORE_HOUND);
-		idealFleet.push(ShipType.SHIP_ORE_HOUND);
-		idealFleet.push(ShipType.SHIP_HEAVY_FREIGHTER); // 25
-		idealFleet.push(ShipType.SHIP_REFINING_FREIGHTER);
-		idealFleet.push(ShipType.SHIP_LIGHT_HAULER);
-		idealFleet.push(ShipType.SHIP_ORE_HOUND);
+	frigate = {frame:'FRAME_FRIGATE', mount: ''};
+	probe = {frame:'FRAME_PROBE', mount: ''};
+	miner = {frame:'FRAME_DRONE', mount: 'MOUNT_MINING_LASER_I'};
+	siphoner = {frame:'FRAME_DRONE', mount: 'MOUNT_GAS_SIPHON_I'};
+	lightFreighter = {frame:'FRAME_LIGHT_FREIGHTER', mount: ''};
+	    
+	getShipTypeToBuy(shipyard: Shipyard): ShipyardShip | null {
+		const idealFleet: ShipConfig[] = [];
+		idealFleet.push(this.frigate);
+		idealFleet.push(this.probe);
+		idealFleet.push(this.siphoner);
+		idealFleet.push(this.lightFreighter);
+		idealFleet.push(this.lightFreighter);
+		idealFleet.push(this.lightFreighter);
+		idealFleet.push(this.lightFreighter);
+		idealFleet.push(this.miner);
+		idealFleet.push(this.lightFreighter);
+		idealFleet.push(this.miner);
+		idealFleet.push(this.lightFreighter);
+		idealFleet.push(this.lightFreighter);
+		idealFleet.push(this.lightFreighter);
+		idealFleet.push(this.lightFreighter);
+		idealFleet.push(this.lightFreighter);
+		idealFleet.push(this.lightFreighter);
+		idealFleet.push(this.lightFreighter);
 
 		for (let bot of this.shipBots) {
 			let index = 0;
 			for (let shipType of idealFleet) {
-				if (this.shipTypeMap.get(shipType) === bot.ship.frame.symbol) {
+				if ((shipType.frame === bot.ship.frame.symbol) && 
+				     (shipType.mount === '' || Ship.containsMount(bot.ship, shipType.mount))) {
 					idealFleet.splice(index, 1);
 					break;
 				}
 				index++;
 			}
 		}
-		let alternate = null;
 		if (idealFleet.length > 0) {
-			for (const type of shipyard.shipTypes) {
-				if (type.type === ShipType[idealFleet[0]].toString()) {
-					return idealFleet[0];
-				}
-				// Allow for the next ship type, if the first isn't being sold here.
-				if (idealFleet.length > 1) {
-					if (type.type === ShipType[idealFleet[1]].toString()) {
-						alternate = idealFleet[0];
-					}
+			for (const ship of shipyard.ships) {
+				if ((idealFleet[0].frame === ship.frame.symbol) && 
+				     (idealFleet[0].mount === '' || Ship.containsMount(ship, idealFleet[0].mount))) {
+					return ship;
 				}
 			}
 		}
-		return alternate;
+		return null;
 	}
 	
 	buyShips(waypoint: WaypointBase) {
 		if (!WaypointBase.hasShipyard(waypoint)) {
 			return;
 		}
-		this.getShipyard(waypoint, true);
 		
-		let shipyard = this.shipyardService.getCachedShipyard(waypoint.symbol, false);
-		if (!shipyard) {
+		let shipyard = this.shipyardService.getCachedShipyard(waypoint.symbol);
+		if (!shipyard?.ships || shipyard.ships.length == 0) {
+			this.getShipyard(waypoint);
 			return;
 		}
 		const shipTypeToBuy = this.getShipTypeToBuy(shipyard);
 		if (!shipTypeToBuy) {
 			return
 		}
-		const shipTypeName = ShipType[shipTypeToBuy].toString();
-		if (this.agent && (this.agent.credits > 150_000)) {
+		// As we get more ship, we need to keep more free capital in order to keep our trade network going
+		const minCreditsToKeep = (this.tradeManager?.shipBots.length || 1) * 50_000 + 50_000;
+		const credits = (this.agent?.credits || 0) - minCreditsToKeep;
+		if (this.agent && (credits > 0)) {
 			for (let ship of shipyard.ships) {
-				if (ship.type === shipTypeName) {
-					if (ship.purchasePrice < (this.agent?.credits || 0)) {
-						const step = new ExecutionStep(null, `Buying ship ${shipTypeName}`, 'bShip');
-						this.fleetService.purchaseShip(shipTypeName, waypoint.symbol).subscribe((response) => {
+				if (ship.type === shipTypeToBuy.type &&
+				    ship.name === shipTypeToBuy.name) {
+					if (ship.purchasePrice < credits) {
+						const step = new ExecutionStep(null, `Buying ship ${shipTypeToBuy.name}`, 'bShip');
+						this.fleetService.purchaseShip(shipTypeToBuy.type, waypoint.symbol)
+						                 .subscribe((response) => {
 							this.completeStep(step);
 							this.refreshShips = 'All';
 							this.refreshAgent = true;
@@ -664,6 +656,11 @@ export class AutomationService {
 		}
 	}
 }
+
+export class ShipConfig {
+	frame!: string;
+	mount!: string;
+};
 
 export class ExecutionStep extends Error {
 	bot: Bot | null;

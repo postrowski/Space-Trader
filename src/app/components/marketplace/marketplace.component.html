@@ -60,29 +60,53 @@
 						<circle r="2" fill="blue"  
 						    [attr.cx]="getXCoordinate(item.timestamp)"
 							[attr.cy]="getYCoordinate(item.purchasePrice)">
-							<title>Purchase price: {{item.purchasePrice}}
+							<title>Purchase price: {{item.purchasePrice | currency : 'USD' : 'symbol' : '1.0-0'}}
 Date: {{formatDate(item.timestamp)}}</title>
 						</circle>
 						<circle r="2" fill="red"
 						    [attr.cx]="getXCoordinate(item.timestamp)"
 							[attr.cy]="getYCoordinate(item.sellPrice)">
-							<title>Sell price: {{item.sellPrice}}
+							<title>Sell price: {{item.sellPrice | currency : 'USD' : 'symbol' : '1.0-0'}}
 Date: {{formatDate(item.timestamp)}}</title>
 						</circle>
+						<!-- Horizontal lines when only one point is known -->
+						<g *ngIf="itemHistory.length == 1">
+							<line
+								x1="0" x2="400"
+								[attr.y1]="getYCoordinate(itemHistory[i].purchasePrice)"
+								[attr.y2]="getYCoordinate(itemHistory[i].purchasePrice)"
+								stroke="blue" stroke-width="2"></line>
+							<line
+								x1="0" x2="400"
+								[attr.y1]="getYCoordinate(itemHistory[i].sellPrice)"
+								[attr.y2]="getYCoordinate(itemHistory[i].sellPrice)"
+								stroke="red" stroke-width="2"></line>
+							<line
+								x1="0" x2="400"
+								[attr.y1]="250 - 10*getYCoordinateSupply(itemHistory[i].supply)"
+								[attr.y2]="250 - 10*getYCoordinateSupply(itemHistory[i].supply)"
+								stroke="white" stroke-width="1"></line>
+							<line
+								x1="0" x2="400"
+								[attr.y1]="300 - 10*getYCoordinateActivity(itemHistory[i].activity)"
+								[attr.y2]="300 - 10*getYCoordinateActivity(itemHistory[i].activity)"
+								[attr.stroke]="getColorActivity(itemHistory[i].activity)"
+								stroke-width="1"></line>
+						</g>
 						<!-- lines between each point -->
 						<g *ngIf="i>0">
 							<line
 								[attr.x1]="getXCoordinate(itemHistory[i].timestamp)"
+								[attr.x2]="getXCoordinate(itemHistory[i - 1].timestamp)"
 								[attr.y1]="getYCoordinate(itemHistory[i].purchasePrice)"
-								[attr.x2]="getXCoordinate(itemHistory[i - 1].timestamp)"
 								[attr.y2]="getYCoordinate(itemHistory[i - 1].purchasePrice)"
-								stroke="blue" stroke-width="1"></line>
-							<line *ngIf="i>0"
+								stroke="blue" stroke-width="2"></line>
+							<line
 								[attr.x1]="getXCoordinate(itemHistory[i].timestamp)"
-								[attr.y1]="getYCoordinate(itemHistory[i].sellPrice)"
 								[attr.x2]="getXCoordinate(itemHistory[i - 1].timestamp)"
+								[attr.y1]="getYCoordinate(itemHistory[i].sellPrice)"
 								[attr.y2]="getYCoordinate(itemHistory[i - 1].sellPrice)"
-								stroke="red" stroke-width="1"></line>
+								stroke="red" stroke-width="2"></line>
 							<line
 								[attr.x1]="getXCoordinate(itemHistory[i].timestamp)"
 								[attr.x2]="getXCoordinate(itemHistory[i - 1].timestamp)"
@@ -154,8 +178,8 @@ Date: {{formatDate(item.timestamp)}}</title>
 				<tr *ngFor="let item of itemAtOtherMarkets | sort:sortKey:sortDirection" [attr.class]="item.marketSymbol == waypoint.symbol ? 'currentMarket' : ''">
 					<td (click)="onMarketClick(item.marketSymbol)" class="link">{{item.marketSymbol}}</td>
 					<td>{{item.distance}}</td>
-					<td>{{item.purchasePrice}}</td>
-					<td>{{item.sellPrice}}</td>
+					<td>{{item.purchasePrice | currency : 'USD' : 'symbol' : '1.0-0'}}</td>
+					<td>{{item.sellPrice | currency : 'USD' : 'symbol' : '1.0-0'}}</td>
 					<td>{{item.tradeVolume}}</td>
 					<td title="{{item.itemType}}"><img [attr.src]="'assets/icons/'+item.itemType+'.png'"/></td>
 					<td title="{{item.activity}}"><img [attr.src]="'assets/icons/'+item.activity+'.png'" *ngIf="item.activity"/></td>

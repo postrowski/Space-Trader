@@ -98,6 +98,39 @@ export class PairManager extends Manager {
 			bot.consolidateCargo(otherShipsAtWaypoint);
 			bot.jettisonUnsellableCargo(waypoint, this.contract, this.constructionSite);
 		}
+		if (bot.role == Role.Hauler && 
+		    bot.ship.cargo.units > 30 &&
+		    bot.ship.nav.status != 'IN_TRANSIT' &&
+		    bot.ship.nav.waypointSymbol == this.miningWaypoint?.symbol) {
+			const sellPlan = this.marketService.findBestMarketToSellAll(bot.ship, waypoint, 1);
+			if (sellPlan) {
+				const latestMarketItemByTradeSymbol = this.marketService.latestMarketItemByTradeSymbolByWaypointSymbol.get(sellPlan.endingWaypoint.symbol);
+				if (latestMarketItemByTradeSymbol) {
+					let priceTotal = 0;
+					let count = 0;
+					for (const inv of bot.ship.cargo.inventory) {
+						if (bot.canSellOrJettisonCargo(inv.symbol, this.contract, this.constructionSite)) {
+							const latestMarketItem = latestMarketItemByTradeSymbol.get(inv.symbol);
+							if (latestMarketItem) {
+								priceTotal += latestMarketItem.sellPrice || 0;
+								count++;
+							}
+						}
+					}
+					const avePrice = priceTotal / count;
+					for (const inv of bot.ship.cargo.inventory) {
+						if (bot.canSellOrJettisonCargo(inv.symbol, this.contract, this.constructionSite)) {
+							const latestMarketItem = latestMarketItemByTradeSymbol.get(inv.symbol);
+							if (latestMarketItem) {
+								if (latestMarketItem.sellPrice < avePrice / 2) {
+									bot.jettisonCargo(inv.symbol, inv.units);
+								}
+							}
+						}
+					}
+				}
+			}
+		}
 		
 		if (this.miningWaypoint == null) {
 			this.getLocationToMine(system, waypoint);
@@ -137,43 +170,6 @@ export class PairManager extends Manager {
 	scoreWaypoint(waypoint: WaypointBase): number {
 		//this.marketService.findBestMarketToSell();
 		return 0;
-	}
-	
-	getBestSurveyToUse(waypoint: WaypointBase, surveys: Survey[]): Survey | undefined {
-		const surveyAverages: { [symbol: string]: number } = {};
-
-		const aveFuelCost = this.marketService.getAverageFuelCost(waypoint.symbol)
-		// Calculate average price per unit for each survey
-		surveys.forEach((survey) => {
-			const sum = survey.deposits.reduce((total, deposit) => {
-				const nearestMarket = this.marketService.getNearestMarketInSystemThatTradesItem(waypoint, deposit.symbol);
-				if (!nearestMarket) return total;
-
-				const distance = LocXY.getDistance(nearestMarket, waypoint);
-				const fuelCost = distance * 2 * aveFuelCost / 20;
-				const marketItem = this.marketService.getItemAtMarket(nearestMarket.symbol, deposit.symbol);
-				if (!marketItem) return total;
-
-				let value = marketItem.sellPrice;
-				return total + value - fuelCost;
-			}, 0);
-
-			const averagePrice = sum / survey.deposits.length;
-			surveyAverages[survey.symbol] = isNaN(averagePrice) ? 0 : averagePrice;
-		});
-
-		// Find the survey with the highest average price per unit
-		let highestAverageSurvey: Survey | undefined;
-		let highestAveragePrice = -Infinity;
-
-		for (const survey of surveys) {
-			const averagePrice = surveyAverages[survey.symbol];
-			if (averagePrice > highestAveragePrice) {
-				highestAverageSurvey = survey;
-				highestAveragePrice = averagePrice;
-			}
-		}
-		return highestAverageSurvey;
 	}
 	
 }

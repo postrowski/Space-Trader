@@ -4,6 +4,7 @@
 		<tr>
 			<td class="wide">
 				{{running ? 'Running' : 'Stopped'}}
+				<br/>
 				<button *ngIf="running" (click)="onStop()" title="Stop">
 					<img src="assets/Stop.png">
 				</button>

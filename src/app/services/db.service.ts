@@ -7,6 +7,7 @@ import { System } from 'src/models/System';
 import { Waypoint } from 'src/models/Waypoint';
 import { UiMarketItem } from './market.service';
 import { LogMessage } from '../utils/log-message';
+import { MarketTransaction } from 'src/models/MarketTransaction';
 
 @Injectable({
 	providedIn: 'root',
@@ -20,6 +21,7 @@ export class DBService {
 	agent!: Dexie.Table<Agent, string>;
 	jumplinks!: Dexie.Table<JumpLink, string>;
 	marketItems!: Dexie.Table<UiMarketItem, number>;
+	marketTransactions!: Dexie.Table<MarketTransaction, number>;
 	shipyards!: Dexie.Table<Shipyard, string>;
 	jumpgates!: Dexie.Table<JumpGate, string>;
 	agents!: Dexie.Table<AgentInfo, number>;
@@ -30,14 +32,58 @@ export class DBService {
 		this.initDatabase();
 	}
 
+	async removeRedundantMarketItems(): Promise<void> {
+		const start = Date.now();
+		// Fetch all items from the marketItems table and sort by timestamp
+		const allItems = await this.marketItems.orderBy('timestamp').toArray();
+
+		// Create a Map to store items based on marketSymbol and symbol
+		const marketItemMap = new Map<string, UiMarketItem[]>();
+		const itemsToKeep: UiMarketItem[] = [];
+
+		// Iterate through the array and organize items into the map
+		for (const item of allItems) {
+			// Create a unique key based on marketSymbol and symbol
+			const key = `${item.marketSymbol}-${item.symbol}`;
+
+			// Check if the key already exists in the map
+			if (marketItemMap.has(key)) {
+				// If the key exists, append the item to the existing array
+				marketItemMap.get(key)!.push(item);
+			} else {
+				// If the key doesn't exist, create a new array with the item and set it as the value
+				marketItemMap.set(key, [item]);
+			}
+		}
+		
+		for (const items of marketItemMap.values()) {
+			// Iterate through the items to find and remove redundancies
+			for (let i = 1; i < items.length - 1; i++) {
+				const currentItem = allItems[i];
+	
+				// Check if the current item is redundant
+				if (!UiMarketItem.compare(currentItem, allItems[i - 1]) ||
+				    !UiMarketItem.compare(currentItem, allItems[i + 1])) {
+					// Add non-redundant item to the new array
+					itemsToKeep.push(currentItem);
+				}
+			}
+		}
+		// Replace the contents of the marketItems table with the filtered array
+		await this.marketItems.clear();
+		await this.marketItems.bulkAdd(itemsToKeep);
+		console.log(`cleanup took ${(Date.now() - start) / 1000}, started with ${allItems.length}, ended with ${itemsToKeep.length}`);
+	}
+
 	public async initDatabase(): Promise<void> {
 		this.db = new Dexie('SpaceTraderDB');
-		this.db.version(4).stores({
+		this.db.version(5).stores({
 			systems: 'symbol, x, y',
 			waypoints: 'symbol,systemSymbol',
 			agent: 'symbol',
 			jumplinks: 'fromSymbol',
 			marketItems: '++,symbol,marketSymbol,[symbol+marketSymbol],timestamp',
+			marketTransactions: '++,waypointSymbol,shipSymbol,tradeSymbol,type,timestamp',
 			shipyards: 'symbol',
 			jumpgates: 'symbol',
 			agents: '++id',
@@ -55,6 +101,7 @@ export class DBService {
 		this.agent = this.db.table('agent');
 		this.jumplinks = this.db.table('jumplinks');
 		this.marketItems = this.db.table('marketItems');
+		this.marketTransactions = this.db.table('marketTransactions');
 		this.shipyards = this.db.table('shipyards');
 		this.jumpgates = this.db.table('jumpgates');
 		this.agents = this.db.table('agents');
@@ -93,6 +140,7 @@ export class DBService {
 		this.agent.clear();
 		this.jumplinks.clear();
 		this.marketItems.clear();
+		this.marketTransactions.clear();
 		this.shipyards.clear();
 		this.jumpgates.clear();
 		this.agents.clear();
@@ -167,6 +215,15 @@ export class DBService {
 		return this.waypoints.toArray();
 	}
 
+	addMarketTransactions(marketTransactions: MarketTransaction[]) {
+		for (const marketTransaction  of marketTransactions) {
+			this.addMarketTransaction(marketTransaction);
+		}
+	}
+	addMarketTransaction(marketTransaction: MarketTransaction) {
+		this.marketTransactions.add(marketTransaction);
+	}
+	
 	addMarketItems(marketItems: UiMarketItem[]) {
 		for (const marketItem of marketItems) {
 			this.addMarketItem(marketItem);
@@ -181,14 +238,11 @@ export class DBService {
 					})
 				.sortBy('timestamp');
 			let itemMatchedLastItem = false;
-			if (existingItems && existingItems.length > 1) {
+			if (existingItems && existingItems.length > 2) {
 				const lastItem = existingItems[existingItems.length-1];
-				if (lastItem.type          === item.type          &&
-					lastItem.tradeVolume   === item.tradeVolume   &&
-					lastItem.activity      === item.activity      &&
-					lastItem.supply        === item.supply        &&
-					lastItem.purchasePrice === item.purchasePrice &&
-					lastItem.sellPrice     === item.sellPrice       ) {
+				const prevItem = existingItems[existingItems.length-2];
+				if (UiMarketItem.compare(lastItem, item) &&
+				    UiMarketItem.compare(prevItem, item)) {
 					// Item matched the most recent item with all the same properties, update its timestamp:
 					lastItem.timestamp = item.timestamp;
 					this.marketItems.put(lastItem);
@@ -215,8 +269,10 @@ export class DBService {
 			});
 	}
 	nextLogMessage = -1;
-	async addLogMessage(message: LogMessage) {
+	//async 
+	addLogMessage(message: LogMessage) {
 		if (this.logs) {
+			/*
 			await this.db.transaction('rw', this.logs, async () => {
 				if (this.nextLogMessage == -1) {
 					// Query Dexie to get the highest ID
@@ -231,6 +287,7 @@ export class DBService {
 						console.error('Error adding log message:', error);
 					});
 			});
+			*/
 		}
 	}
 	addJumpgate(jumpgate: JumpGate, symbol: string) {

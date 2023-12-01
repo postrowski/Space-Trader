@@ -143,6 +143,7 @@ export class ShiplistComponent implements OnInit {
 	onSelectShip(ship: Ship) {
 		this.selectedShip = ship;
 		this.selectedCargoItem = null;
+		this.fleetService.setActiveShip(ship);
 	}
 	
 	onOrbitShip(ship: Ship) {

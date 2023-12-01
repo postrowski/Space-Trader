@@ -17,6 +17,7 @@ import { GalaxyService } from '../../services/galaxy.service';
 export class SystemMapComponent extends SvgMap {
 
 	uiWaypoints: UiWaypoint[] = [];
+	shipsBySymbol = new Map<string, Ship>();
 	_system: System | null | undefined = null;
 	starField: {x: number, y: number, size: number, color: string}[] = [];
 	selectedWaypoint: UiWaypoint | null = null;
@@ -49,6 +50,12 @@ export class SystemMapComponent extends SvgMap {
 			this.shipLocBySymbol = shipLocBySymbol;
 			this.updateShipLocsInSystem();
 		});
+		this.fleetService.allShips$.subscribe((ships) => {
+			for (const ship of ships) {
+				this.shipsBySymbol.set(ship.symbol, ship);
+			}
+		});
+
 		
 		for (let i = 0; i < 600; i++) {
 			const x = Math.random() * this.width;
@@ -96,11 +103,12 @@ export class SystemMapComponent extends SvgMap {
 			const patternDuration = 1000; // repeat pattern every 1 seconds;
 			const delta = elapsedTime % patternDuration;
 			const percent = delta / patternDuration;
-			this.animationOffset = percent * 10; // patter size is 10 pixels long (5,5)
-		}, 100);
+			this.animationOffset = percent * this.cycleLength;
+		}, 200);
 	}
 	animationInterval: any;
 	animationOffset = 0;
+	cycleLength = 20;
 
 	updateShipLocsInSystem() {
 		this.shipLocInSystemBySymbol = {};
@@ -132,6 +140,43 @@ export class SystemMapComponent extends SvgMap {
 	}
 	shipTextSize() : number{
 		return 10 * Math.sqrt(this.objectScale);
+	}
+	getDashArray(shipSymbol: string) {
+		const ship = this.shipsBySymbol.get(shipSymbol);
+		let speed = 1;
+		if (ship && ship.nav.status == 'IN_TRANSIT') {
+			if (ship.nav.flightMode == 'DRIFT') speed = 1;
+			if (ship.nav.flightMode == 'STEALTH') speed = 2;
+			if (ship.nav.flightMode == 'CRUISE') speed = 4;
+			if (ship.nav.flightMode == 'BURN') speed  = 10;
+		}
+		return speed + ', ' + (this.cycleLength - speed);
+	}
+	shipColor(shipSymbol: string) {
+		const ship = this.shipsBySymbol.get(shipSymbol);
+		if (ship) {
+			const frame = ship.frame.name.toLowerCase();
+			if (frame.includes('frigate')) return '#FFFFFF';
+			if (frame.includes('freighter')) return '#44FFBB';
+			if (frame.includes('probe')) return '#FF44BB';
+			if (frame.includes('drone') && Ship.containsMount(ship, 'MOUNT_SURVEYOR')) return '#BB44FF';
+			if (frame.includes('drone') && Ship.containsMount(ship, 'MOUNT_GAS_SIPHON')) return '#BBFF44';
+			if (frame.includes('drone') && Ship.containsMount(ship, 'MOUNT_MINING_LASER')) return '#44BBFF';
+		}
+		return '#FFBB44';
+	}
+	getTextAngle(shipSymbol: string) {
+		const ship = this.shipsBySymbol.get(shipSymbol);
+		if (ship) {
+			const frame = ship.frame.name.toLowerCase();
+			if (frame.includes('frigate')) return -10;
+			if (frame.includes('freighter')) return -20;
+			if (frame.includes('probe')) return -40;
+			if (frame.includes('drone') && Ship.containsMount(ship, 'MOUNT_SURVEYOR')) return -50;
+			if (frame.includes('drone') && Ship.containsMount(ship, 'MOUNT_GAS_SIPHON')) return -30;
+			if (frame.includes('drone') && Ship.containsMount(ship, 'MOUNT_MINING_LASER')) return -30;
+		}
+		return 15;
 	}
 	onSelectShipBySymbol(symbol: string) {
 		const ship = this.fleetService.getShipBySymbol(symbol);

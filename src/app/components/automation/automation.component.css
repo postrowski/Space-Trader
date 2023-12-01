@@ -33,6 +33,7 @@ div.step {
 	border: none;
 	padding: 0px;
 	margin: 0px;
+	width: 50px;
 }
 .allow_ship {
 	font-size: 12px;

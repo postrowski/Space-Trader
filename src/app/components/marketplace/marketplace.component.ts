@@ -1,5 +1,6 @@
-import { Component, Input, OnInit } from '@angular/core';
+import { Component, OnInit } from '@angular/core';
 import { AccountService } from 'src/app/services/account.service';
+import { DBService } from 'src/app/services/db.service';
 import { FleetService } from 'src/app/services/fleet.service';
 import { GalaxyService } from 'src/app/services/galaxy.service';
 import { MarketService, UiMarketItem } from 'src/app/services/market.service';
@@ -7,6 +8,7 @@ import { ModalService } from 'src/app/services/modal.service';
 import { Agent } from 'src/models/Agent';
 import { LocXY } from 'src/models/LocXY';
 import { MarketItemType } from 'src/models/Market';
+import { MarketTransaction } from 'src/models/MarketTransaction';
 import { Ship } from 'src/models/Ship';
 import { ShipCargoItem } from 'src/models/ShipCargoItem';
 import { WaypointBase, WaypointTrait } from 'src/models/WaypointBase';
@@ -24,6 +26,10 @@ export class MarketplaceComponent implements OnInit{
 	itemHistory: UiMarketItem[] = [];
 	itemAtOtherMarkets: UiMarketItemWithDist[] =[];
 	goods: TypedMarketItem[] = [];
+	tradeVolumes: number[] = [];
+	transactions: MarketTransaction[] = [];
+	markerDates: Date[] = [];
+	selectedTransactions: MarketTransaction[] = [];
 	shipsAtWaypoint: Ship[] = [];
 	allShips: Ship[] = [];
 	selectedShip: Ship | null = null;
@@ -47,6 +53,7 @@ export class MarketplaceComponent implements OnInit{
 	            public fleetService: FleetService,
 	            public accountService: AccountService,
    		        public marketService: MarketService,
+   		        public dbService: DBService,
 	            public modalService: ModalService) {
 		modalService.waypoint$.subscribe((response) => {
 			this.waypoint = response;
@@ -59,6 +66,9 @@ export class MarketplaceComponent implements OnInit{
 			this.allShips = allShips;
 			this.loadShips();
 		});
+		this.fleetService.activeShip$.subscribe((activeShip) => {
+			this.selectedShip = activeShip;
+		});
 	}
 	
 	ngOnInit(): void {
@@ -66,6 +76,9 @@ export class MarketplaceComponent implements OnInit{
 		this.loadMarket();
 	}
 	
+	formatDateTransaction(transaction: MarketTransaction) {
+		return this.formatDate(new Date(transaction.timestamp));
+	}
 	formatDate(date: Date) {
 		return new Intl.DateTimeFormat('en-US', {
 			hour: '2-digit',
@@ -73,6 +86,25 @@ export class MarketplaceComponent implements OnInit{
 			second: '2-digit',
 			day: 'numeric',
 			month: 'short'
+		}).format(date);
+	}
+	
+	formatDateShort(date: Date) {
+		if (date.getHours() == 0) {
+			return new Intl.DateTimeFormat('en-US', {
+				day: 'numeric'
+			}).format(date);
+		}
+		if ((date.getMinutes() == 0) && (date.getSeconds() == 0)) {
+			return new Intl.DateTimeFormat('en-US', {
+				hour: '2-digit',
+				minute: '2-digit',
+				hour12: false,
+			}).format(date);
+		}
+		return new Intl.DateTimeFormat('en-US', {
+			hour: '2-digit',
+			minute: '2-digit',
 		}).format(date);
 	}
 	
@@ -103,6 +135,7 @@ export class MarketplaceComponent implements OnInit{
 	updateMarket(marketItems: UiMarketItem[]) {
 		this.marketItems = marketItems;
 		let goods: TypedMarketItem[] = [];
+		let volumes = new Set<number>();
 		if (this.marketItems) {
 			for (const marketItem of this.marketItems) {
 				let item: TypedMarketItem = {
@@ -118,11 +151,14 @@ export class MarketplaceComponent implements OnInit{
 					timestamp: marketItem.timestamp
 				}
 				goods.push(item);
+				volumes.add(marketItem.tradeVolume);
 			}
 		}
 		this.goods = goods.sort((g1, g2) => {
 			return this.compare(g1.symbol, g2.symbol);
 		});
+		this.tradeVolumes = [...volumes];
+		this.tradeVolumes.sort((v1, v2) => {if (v1<v2) return -1;if (v1>v2) return 1; return 0;});
 	}
 	
 	loadMarket() {
@@ -130,10 +166,21 @@ export class MarketplaceComponent implements OnInit{
 		this.selectedCargoItem = null;
 		this.goods = [];
 		this.itemHistory = [];
+		this.transactions = [];
+		this.selectedTransactions = [];
 		if (this.waypoint && this.hasMarketplace()) {
 			this.marketService.getMarketplace(this.waypoint.symbol, this.shipsAtWaypoint.length> 0)
 			                  .subscribe((response) => {
 				this.updateMarket(response);
+			});
+			this.dbService.marketTransactions
+						  .where('waypointSymbol')
+						  .equalsIgnoreCase(this.waypoint.symbol)
+						  .toArray()
+						  .then((marketTransactions) => {
+				if (marketTransactions) {
+					this.transactions = marketTransactions;
+				}
 			});
 		}
 		const systemSymbol = GalaxyService.getSystemSymbolFromWaypointSymbol(this.waypoint?.symbol || '');
@@ -163,6 +210,7 @@ export class MarketplaceComponent implements OnInit{
 	selectTradeItem(item: TypedMarketItem) {
 		this.selectedTradeItem = item;
 		this.selectedItemSymbol = item.symbol;
+		this.selectedTransactions = [];
 		this.updateOtherMarkets();
 		if (this.waypoint) {
 			this.itemHistory = this.marketService.getItemHistoryAtMarket(this.waypoint.symbol, item.symbol)
@@ -172,14 +220,62 @@ export class MarketplaceComponent implements OnInit{
 				if (h1.timestamp > h2.timestamp) return 1;
 				return 0;
 			});
-			const oldest = Math.min(...this.itemHistory.map((item) => item.timestamp.getTime()));
-			const newest = Math.max(...this.itemHistory.map((item) => item.timestamp.getTime()));
-			const highestPurchasePrice = Math.max(...this.itemHistory.map((item) => item.purchasePrice));
-			const highestSellPrice = Math.max(...this.itemHistory.map((item) => item.sellPrice));
+			const oldest = this.itemHistory[0].timestamp;
+			const newest = new Date(Date.now());
+			let highestPurchasePrice = 0;
+			let highestSellPrice = 0;
+			for (const hist of this.itemHistory) {
+				if (hist.purchasePrice > highestPurchasePrice) {
+					highestPurchasePrice = hist.purchasePrice;
+				}
+				if (hist.sellPrice > highestSellPrice) {
+					highestSellPrice = hist.sellPrice;
+				}
+			}
+			
+			this.markerDates = [];
+			this.markerDates.push(new Date(oldest));
+			if ((newest.getTime() - oldest.getTime()) > 1000 * 60 * 60 * 24) {
+				// get the midnight time of the next day
+				let nextDay = new Date(oldest);
+				nextDay.setHours(0, 0, 0, 0);
+				while (true) {
+					nextDay.setDate(nextDay.getDate() + 1);
+					if (nextDay.getTime() > Date.now()) {
+						break;
+					}
+					this.markerDates.push(nextDay);
+					nextDay = new Date(nextDay);
+				}
+			} else {
+				const nextHour = new Date(oldest);
+				while (nextHour.getTime() < Date.now()) {
+					nextHour.setHours(nextHour.getHours(), 0, 0, 0);
+					nextHour.setHours(nextHour.getHours() + 1);
+					this.markerDates.push(nextHour);
+				}
+			}
+			this.markerDates.push(new Date(newest));
+			while (this.markerDates.length > 10) {
+				const newDates = [];
+				let include = true;
+				for (const date of this.markerDates) {
+					if (include) {
+						newDates.push(date);
+					}
+					include = !include;
+				}
+				if (this.markerDates.length % 2 == 0) {
+					newDates.push(new Date(newest));
+				}
+				this.markerDates = newDates;
+			}
 
 			this.maxPrice = this.getNextBiggestNumber(Math.max(highestPurchasePrice, highestSellPrice));
-			this.xScale = this.createScale(oldest, newest, 0, 400);
+			this.xScale = this.createScale(oldest.getTime(), newest.getTime(), 0, 400);
 			this.yScale = this.createScale(this.maxPrice, 0, 0, 200);
+			
+			this.selectedTransactions = this.transactions.filter(trans => trans.tradeSymbol == this.selectedItemSymbol);
 		}
 	}
 	private getNextBiggestNumber(num: number) : number {
@@ -204,6 +300,9 @@ export class MarketplaceComponent implements OnInit{
 		return (value: number) => ((domainRange == 0) ? 0 : ((value - domainStart) / domainRange) * rangeRange) + rangeStart;
 	}
 	
+	getXCoordinateTransaction(transaction: MarketTransaction): number {
+		return this.getXCoordinate(new Date(transaction.timestamp));
+	}
 	getXCoordinate(timestamp: Date): number {
 		if (this.xScale)
 			return this.xScale(timestamp.getTime());
@@ -278,9 +377,6 @@ export class MarketplaceComponent implements OnInit{
 		this.selectedCargoItem = item;
 		this.selectedItemSymbol = item.symbol;
 		this.updateOtherMarkets();
-	}
-	onSelectShip(ship: Ship) {
-		this.selectedShip = ship;
 	}
 	onDockShip(ship: Ship) {
 		if (ship) {

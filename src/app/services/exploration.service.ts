@@ -150,7 +150,7 @@ export class ExplorationService {
 		return null;
 	}
 
-	public static sortWaypointsByDistanceFrom(waypoints: WaypointBase[], fromLoc: LocXY) {
+	public static sortWaypointsByDistanceFrom(waypoints: WaypointBase[], fromLoc: LocXY): WaypointBase[] {
 		return [...waypoints].sort((w1, w2) => {
 			const d1 = LocXY.getDistanceSquared(fromLoc, w1);
 			const d2 = LocXY.getDistanceSquared(fromLoc, w2);

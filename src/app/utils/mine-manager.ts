@@ -4,8 +4,6 @@ import { WaypointBase } from "src/models/WaypointBase";
 import { System } from "src/models/System";
 import { Manager } from "./manager";
 import { ExplorationService } from "../services/exploration.service";
-import { LocXY } from "src/models/LocXY";
-import { Survey } from "src/models/Survey";
 
 export class MineManager extends Manager {
 
@@ -98,41 +96,4 @@ export class MineManager extends Manager {
 			this.sellAll(bot, waypoint);
 		}
 	}
-	getBestSurveyToUse(waypoint: WaypointBase, surveys: Survey[]): Survey | undefined {
-		const surveyAverages: { [symbol: string]: number } = {};
-
-		const aveFuelCost = this.marketService.getAverageFuelCost(waypoint.symbol)
-		// Calculate average price per unit for each survey
-		surveys.forEach((survey) => {
-			const sum = survey.deposits.reduce((total, deposit) => {
-				const nearestMarket = this.marketService.getNearestMarketInSystemThatTradesItem(waypoint, deposit.symbol);
-				if (!nearestMarket) return total;
-
-				const distance = LocXY.getDistance(nearestMarket, waypoint);
-				const fuelCost = distance * 2 * aveFuelCost / 20;
-				const marketItem = this.marketService.getItemAtMarket(nearestMarket.symbol, deposit.symbol);
-				if (!marketItem) return total;
-
-				let value = marketItem.sellPrice;
-				return total + value - fuelCost;
-			}, 0);
-
-			const averagePrice = sum / survey.deposits.length;
-			surveyAverages[survey.symbol] = isNaN(averagePrice) ? 0 : averagePrice;
-		});
-
-		// Find the survey with the highest average price per unit
-		let highestAverageSurvey: Survey | undefined;
-		let highestAveragePrice = -Infinity;
-
-		for (const survey of surveys) {
-			const averagePrice = surveyAverages[survey.symbol];
-			if (averagePrice > highestAveragePrice) {
-				highestAverageSurvey = survey;
-				highestAveragePrice = averagePrice;
-			}
-		}
-		return highestAverageSurvey;
-	}
-	
 }

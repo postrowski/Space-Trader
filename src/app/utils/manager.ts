@@ -12,6 +12,8 @@ import { JumpgateService } from "../services/jumpgate.service";
 import { SurveyService } from "../services/survey.service";
 import { Contract } from "src/models/Contract";
 import { ConstructionSite } from "src/models/ConstructionSite";
+import { Survey } from "src/models/Survey";
+import { LocXY } from "src/models/LocXY";
 
 export abstract class Manager {
 	shipBots: Bot[] = [];
@@ -231,7 +233,7 @@ export abstract class Manager {
 					}
 				}
 			} else {
-				const marketItem: UiMarketItem | null = this.marketService.findCheapestMarketItemForSaleInSystem(waypoint, neededUpgrade, 1);
+				const marketItem: UiMarketItem | null = this.marketService.findCheapestMarketItemForSaleInSystem(waypoint, neededUpgrade, 1, false);
 				if (marketItem && (credits > marketItem.purchasePrice)) {
 					if (marketItem.marketSymbol == waypoint.symbol) {
 						this.addMessage(bot, `buying upgrade item ${neededUpgrade}`);
@@ -253,10 +255,10 @@ export abstract class Manager {
 	}
 	
 	sellAll(bot: Bot, waypoint: WaypointBase) {
-		bot.deliverAll(this.contract, this.constructionSite, true);
+		bot.deliverAll(this.contract, this.constructionSite, true, true);
 		const sellPlan = this.marketService.findBestMarketToSellAll(bot.ship, waypoint, 0);
 		if (sellPlan) {
-			if (sellPlan.sellWaypoint.symbol == waypoint.symbol) {
+			if (sellPlan.endingWaypoint.symbol == waypoint.symbol) {
 				for (const sellItem of sellPlan.sellItems) {
 					for (const inv of bot.ship.cargo.inventory.filter(i => i.symbol == sellItem.symbol)) {
 	                    if (bot.canSellOrJettisonCargo(inv.symbol, this.contract, this.constructionSite)) {
@@ -265,9 +267,170 @@ export abstract class Manager {
 					}
 				}
 			} else {
-				bot.navigateTo(sellPlan.sellWaypoint, sellPlan.route.steps[0].speed,
-				               `Navigating to ${sellPlan.sellWaypoint.symbol} to sell ${sellPlan.sellItems.map(i => i.symbol)}`);
+				bot.navigateTo(sellPlan.endingWaypoint, sellPlan.route.steps[0].speed,
+				               `Navigating to ${sellPlan.endingWaypoint.symbol} to sell ${sellPlan.sellItems.map(i => i.symbol)}`);
 			}
 		}
 	}
+	
+	getBestSurveyToUse(waypoint: WaypointBase, surveys: Survey[]): Survey | undefined {
+		const surveyAverages: { [symbol: string]: number } = {};
+
+		const aveFuelCost = this.marketService.getAverageFuelCost(waypoint.symbol)
+		// Calculate average price per unit for each survey
+		surveys.forEach((survey) => {
+			const sum = survey.deposits.reduce((total, deposit) => {
+				const nearestMarket = this.marketService.getNearestMarketInSystemThatTradesItem(waypoint, deposit.symbol);
+				if (!nearestMarket) return total;
+
+				const distance = LocXY.getDistance(nearestMarket, waypoint);
+				const fuelCost = distance * 2 * aveFuelCost / 20;
+				const marketItem = this.marketService.getItemAtMarket(nearestMarket.symbol, deposit.symbol);
+				if (!marketItem) return total;
+
+				let value = marketItem.sellPrice;
+				return total + value - fuelCost;
+			}, 0);
+
+			const averagePrice = sum / survey.deposits.length;
+			surveyAverages[survey.symbol] = isNaN(averagePrice) ? 0 : averagePrice;
+		});
+
+		// Find the survey with the highest average price per unit
+		let highestAverageSurvey: Survey | undefined;
+		let highestAveragePrice = -Infinity;
+
+		for (const survey of surveys) {
+			const averagePrice = surveyAverages[survey.symbol];
+			if (averagePrice > highestAveragePrice) {
+				highestAverageSurvey = survey;
+				highestAveragePrice = averagePrice;
+			}
+		}
+		return highestAverageSurvey;
+	}
+
+	executeTradeRoute(bot: Bot, waypoint: WaypointBase, system: System, otherShipsAtWaypoint: Bot[]): 'retry' | 'wait' | 'fail' {
+		if (!bot.currentTradeRoute || !system.waypoints) {
+			return 'fail';
+		}
+		const space = bot.ship.cargo.capacity - bot.ship.cargo.units;
+		const invItems = bot.ship.cargo.inventory
+		                    .filter((inv) => bot.currentTradeRoute?.sellItems.some(i => i.symbol === inv.symbol)
+		                                  || bot.currentTradeRoute?.deliverItems.some(i => i.symbol === inv.symbol)
+		                                  || bot.currentTradeRoute?.buyItem?.symbol === inv.symbol);
+		const invItem = (invItems && invItems.length > 1) ? invItems[0] : null;
+		const itemCount = invItem?.units || 0;
+		
+		if (bot.currentTradeRoute.state == 'goBuy') {
+			if (waypoint.symbol == bot.currentTradeRoute.buyItem?.marketSymbol) {
+				bot.currentTradeRoute.state = 'buy';
+			} else if (waypoint.symbol == bot.currentTradeRoute.startingWaypoint.symbol) {
+				bot.currentTradeRoute.state = 'collect';
+			} else {
+				const curRouteBuyWaypointSymbol = bot.currentTradeRoute.buyItem?.marketSymbol || bot.currentTradeRoute.startingWaypoint.symbol;
+				// go to the 'buy' location
+				const market = system.waypoints.find((wp) => wp.symbol == curRouteBuyWaypointSymbol);
+				if (market && market.symbol !== waypoint.symbol) {
+					let via = '';
+					if (bot.currentTradeRoute.route.steps.length > 1) { 
+						via = (' (via ' + bot.currentTradeRoute.route.steps.map(s=>s.loc.symbol)+')');
+					}
+					bot.navigateTo(market, bot.currentTradeRoute.route.steps[0].speed,
+									`Going to ${market.symbol} to buy trade item`+
+									`${via} ${bot.currentTradeRoute.sellItems.map(i => i.symbol)} for $${bot.currentTradeRoute.profit}`);
+				}
+			}
+		}
+		if (bot.currentTradeRoute.state == 'buy') {
+			if (bot.currentTradeRoute.buyItem?.marketSymbol != bot.ship.nav.waypointSymbol) {
+				bot.currentTradeRoute.state = 'goBuy';
+				return 'retry';
+			}
+			// We are at the 'buy' location, buy until we have no room or money, and then go to the 'sell' location
+			if (space == 0 || (this.automationService.agent?.credits || 0) < bot.currentTradeRoute.buyItem.purchasePrice) {
+				bot.currentTradeRoute.state = 'goSell';
+			} else if (bot.ship.nav.status != 'IN_TRANSIT') {
+				const currentItem = this.marketService.getItemAtMarket(bot.currentTradeRoute.buyItem.marketSymbol, bot.currentTradeRoute.buyItem.symbol);
+				const sellItems = bot.currentTradeRoute.sellItems.filter(i => i.symbol == currentItem?.symbol);
+				// make sure the item purchase price is still cheaper than the sell price
+				if (currentItem && sellItems && sellItems.length > 0 &&
+				   (currentItem.purchasePrice < sellItems[0].sellPrice) &&
+				    bot.ship.cargo.units < bot.ship.cargo.capacity) {
+					if (currentItem.purchasePrice < 1) {
+						// Wait here until we get filled by the minning bot
+					} else {
+						this.addMessage(bot, `at market ${waypoint.symbol} to start of trade route.`+
+						                     ` Buying ${space} ${bot.currentTradeRoute.buyItem.symbol}.`);
+						bot.purchaseCargo(bot.currentTradeRoute.buyItem.symbol, space);
+					}
+				} else {
+					this.addMessage(bot, `Costs of trade item ${bot.currentTradeRoute.buyItem.symbol}`+
+					                     ` at ${bot.currentTradeRoute.buyItem.marketSymbol}`+
+					                     ` have changed from ${bot.currentTradeRoute.buyItem.purchasePrice}`+
+					                     ` to ${currentItem?.purchasePrice},`+
+					                     ` which exceeds the current sell price of $${sellItems[0].sellPrice},`+
+					                     ` aborting trade route!`);
+					if (itemCount == 0) {
+						bot.currentTradeRoute = null;
+						return 'retry';
+					}
+					bot.currentTradeRoute.state = 'goSell';
+				}
+			}
+		}
+		if (bot.currentTradeRoute.state == 'collect' && bot.currentTradeRoute.startingWaypoint.symbol == bot.ship.nav.waypointSymbol) {
+			// We are at the 'collect' location, buy until we have no room, and then go to the 'sell' location
+			if (space == 0) {
+				bot.currentTradeRoute.state = 'goSell';
+			} else if (bot.ship.nav.status != 'IN_TRANSIT') {
+				// wait here until our cargo gets filled up by a miner.
+				if (otherShipsAtWaypoint.length == 0) {
+					// If there are no longer any mining ships here, we should go sell what we've got.
+					bot.currentTradeRoute.state = 'goSell';
+				}
+			}
+		}
+		if (bot.currentTradeRoute.state == 'goSell') {
+			if (bot.currentTradeRoute.endingWaypoint.symbol == waypoint.symbol) {
+				bot.currentTradeRoute.state = 'sell';
+			} else {
+				if ((space > 0) && (itemCount == 0)) {
+					// We don't we the item to sell. Maybe we didn't have enough money to buy the item when we got here?
+					// Wait until we have at least something!
+					bot.currentTradeRoute.state = 'goBuy';
+					return 'wait';
+				}
+				// go to the 'sell' location
+				const market = system.waypoints.find((wp) => wp.symbol == bot.currentTradeRoute!.endingWaypoint.symbol);
+				if (market && market.symbol !== waypoint.symbol) {
+					let via = '';
+					if (bot.currentTradeRoute.route.steps.length > 1) { 
+						via = (' (via ' + bot.currentTradeRoute.route.steps.map(s=>s.loc.symbol)+')');
+					}
+					bot.navigateTo(market, bot.currentTradeRoute.route.steps[0].speed,
+									`Going to ${bot.currentTradeRoute.endingWaypoint.symbol}`+
+									`${via} to sell trade item ${bot.currentTradeRoute.sellItems.map(i => i.symbol)}`+
+									` for $${bot.currentTradeRoute.profit}`);
+				}
+			}
+		}
+		if (bot.currentTradeRoute.state == 'sell' &&
+		    bot.currentTradeRoute.endingWaypoint.symbol == bot.ship.nav.waypointSymbol) {
+			// We are at the 'sell' location.
+			if (itemCount == 0) {
+				bot.currentTradeRoute = null;
+				return 'retry';
+			}
+			this.addMessage(bot, `market ${waypoint.symbol} end of trade route to sell ${bot.currentTradeRoute.sellItems.map(i => i.symbol)}.`);
+			if (bot.currentTradeRoute.deliverItems.length > 0) {
+				bot.deliverAll(this.contract, this.constructionSite, false, false);
+			}
+			if (invItem && bot.currentTradeRoute.sellItems.some(i => i.symbol == invItem.symbol)) {
+				bot.sellCargo(invItem.symbol, invItem.units);
+			}
+		}
+		return 'fail';
+	}
+
 }

@@ -1,6 +1,6 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable, OnInit } from '@angular/core';
-import { BehaviorSubject, map, Observable, of, Subject } from 'rxjs';
+import { BehaviorSubject, map, Observable, of, Subject, timer } from 'rxjs';
 import { Agent } from 'src/models/Agent';
 import { Chart } from 'src/models/Chart';
 import { Cooldown } from 'src/models/Cooldown';
@@ -16,7 +16,7 @@ import { Waypoint } from 'src/models/Waypoint';
 import { AccountService } from './account.service';
 import { LocXY } from 'src/models/LocXY';
 import { EventQueueService } from './event-queue.service';
-import { concatMap, shareReplay } from 'rxjs/operators';
+import { concatMap, delay, shareReplay } from 'rxjs/operators';
 import { Survey } from 'src/models/Survey';
 import { Extraction } from 'src/models/Extraction';
 import { ShipCargoItem } from 'src/models/ShipCargoItem';
@@ -162,8 +162,10 @@ export class FleetService implements OnInit {
 				   .pipe(concatMap((response) => {
 						if (response.meta.total > limit * page) {
 							// If there are more pages, recursively load them
-							return this.updateFleet2(limit, page + 1)
-							           .pipe(map((nextPageResults) => [...response.data, ...nextPageResults]));
+							 return timer(400).pipe(delay(400), // Introduce a 400ms delay between requests
+							                        concatMap(() => this.updateFleet2(limit, page + 1)),
+							                                  map((nextPageResults) => [...response.data, ...nextPageResults])
+							        );
 						}
 						// No more pages, just return the data from this page
 						return of(response.data);

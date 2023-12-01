@@ -22,7 +22,8 @@ export enum Role {
 	Hauler,
 	Surveyor,
 	SurveyorMiner,
-	Refinery
+	Refinery,
+	DesignatedMarketWatcher
 }
 
 export class Bot {
@@ -55,20 +56,26 @@ export class Bot {
 		const hasMining   = Ship.containsMount( this.ship, 'MOUNT_MINING_LASER');
 		const hasRefinery = Ship.containsModule(this.ship, 'MODULE_ORE_REFINERY');
 		const hasCargo    = Ship.containsModule(this.ship, 'MODULE_CARGO_HOLD_II');
-		if (hasRefinery) {
+		const isCommand   = this.ship.frame.name.toUpperCase().includes('FRIGATE');
+		const isProbe     = this.ship.frame.name.toUpperCase().includes('PROBE');
+		if (isCommand) {
+			this.role = Role.Hauler;
+		} else if (hasRefinery) {
 			this.role = Role.Refinery;
 		} else if (hasSurveyor && hasMining) {
 			this.role = Role.SurveyorMiner;
 		} else if (hasSurveyor) {
 			this.role = Role.Surveyor;
-		} else if (hasCargo) {
-			this.role = Role.Hauler;
 		} else if (hasSiphon) {
 			this.role = Role.Siphon;
 		} else if (hasMining) {
 			this.role = Role.Miner;
-		} else {
+		} else if (hasCargo) {
+			this.role = Role.Hauler;
+		} else if (isProbe) {
 			this.role = Role.Explorer;
+		} else {
+			this.role = Role.DesignatedMarketWatcher;
 		}
 	}
 
@@ -280,19 +287,25 @@ export class Bot {
 			if (this.canSellOrJettisonCargo(inv.symbol, contract, constructionSite)) {
 				// Assume a full load
 				const units = this.ship.cargo.capacity;
-				if (this.marketService.findBestMarketToSell(this.ship, waypoint, inv.symbol, units, 0) == null) {
-					this.currentStep = new ExecutionStep(this, `Jettisonning ${inv.units} ${inv.symbol}`, 'jett');
-					this.fleetService.jettisonCargo(this.ship.symbol, inv.symbol, inv.units)
-					                 .subscribe((response) => {
-						this.completeStep();
-					}, (error) => {
-						this.onError(error);
-					});
-					throw this.currentStep;
+				const sellPlan = this.marketService.findBestMarketToSell(this.ship, waypoint, inv.symbol, units, 1);
+				if (sellPlan == null) {
+					this.jettisonCargo(inv.symbol, inv.units);
 				}
 			}
 		}
 	}
+
+	jettisonCargo(symbol: string, units: number) {
+		this.currentStep = new ExecutionStep(this, `Jettisonning ${units} ${symbol}`, 'jett');
+		this.fleetService.jettisonCargo(this.ship.symbol, symbol, units)
+			.subscribe((response) => {
+				this.completeStep();
+			}, (error) => {
+				this.onError(error);
+			});
+		throw this.currentStep;
+	}
+
 	getBestMinerToSupport(waypoint: WaypointBase, system: System,
 						  fuelPricesByWaypointSymbol: Map<string, UiMarketItem>, allShips: Bot[]) 
 						  : {waypoint: WaypointBase, sellPlan: SellPlan} | null {
@@ -334,7 +347,7 @@ export class Bot {
 					}
 					for (const item of minedItems) {
 						const route = this.marketService.findBestMarketToSell(this.ship, minerWaypoint, item,
-						                                                      this.ship.cargo.capacity, 0);
+						                                                      this.ship.cargo.capacity, 1);
 						if (route && (route.profitPerSecond > 0) &&
 							(bestRoute == null || route.profitPerSecond > bestRoute.profitPerSecond)) {
 							bestRoute = route;
@@ -354,7 +367,6 @@ export class Bot {
 	}
 
 	currentTradeRoute: TradeRoute | null = null;
-	tradeRouteState = ''; // possible states: '', 'goBuy', 'buy', 'goSell', 'sell'
 	
 	mine(survey?: Survey) {
 		if (this.ship.cooldown.remainingSeconds) {
@@ -483,6 +495,10 @@ export class Bot {
 		}
 		const shipsWithSpace = otherBotsAtWaypoint.filter((bot) => bot.ship.cargo.capacity > bot.ship.cargo.units);
 		for (let inv of this.ship.cargo.inventory) {
+			// dont transfer away our own trade route cargo
+			if (this.currentTradeRoute && this.currentTradeRoute.sellItems.some(i=>i.symbol == inv.symbol)) {
+				continue;
+			}
 			// First check if there are refinery ships nearby:
 			if (inv.symbol.endsWith("_ORE")) {
 				for (let otherBot of shipsWithSpace) {
@@ -523,8 +539,8 @@ export class Bot {
 		for (let inv of this.ship.cargo.inventory) {
 			// dont sell trade route items unless we are at the destination market
 			if (this.currentTradeRoute && 
-			    this.currentTradeRoute.sellItems.some(i => i.symbol === inv.symbol) &&
-			    this.currentTradeRoute.sellWaypoint.symbol === waypoint.symbol) {
+			    this.currentTradeRoute.sellItems.some(i => i.symbol === inv.symbol && i.marketSymbol === waypoint.symbol) &&
+			    this.currentTradeRoute.endingWaypoint.symbol === waypoint.symbol) {
 				this.addMessage(`market ${waypoint.symbol} is end of trade route to sell ${inv.symbol}.`);
 				this.sellCargo(inv.symbol, inv.units);
 				continue;
@@ -536,7 +552,7 @@ export class Bot {
 			// make sure this market is the best place to sell this item.
 			// TODO: use findBestMarketToSellAll instead, but need to handle case of not considering sale of contract on con
 			let bestMarket = this.marketService.findBestMarketToSell(this.ship, waypoint, inv.symbol, inv.units, 0);
-			if (bestMarket?.sellWaypoint.symbol == waypoint.symbol) {
+			if (bestMarket?.endingWaypoint.symbol == waypoint.symbol) {
 				this.addMessage(`market ${waypoint.symbol} identified as best place to sell ${inv.symbol}.`);
 				this.sellCargo(inv.symbol, inv.units);
 			}
@@ -549,13 +565,17 @@ export class Bot {
 		}
 		// Sell anything we can sell at our current location:
 		this.sellAll(waypoint, contract, constructionSite, otherBotsAtWaypoint);
-		const marketsToGoTo: WaypointBase[] = [];
+		const marketsToGoTo: {waypoint: WaypointBase, speed: string}[] = [];
 		for (let inv of this.ship.cargo.inventory) {
 			// dont sell trade route items unless we are at the destination market
 			if (this.currentTradeRoute && 
 			    this.currentTradeRoute.sellItems.some(i => i.symbol === inv.symbol) &&
-			    this.currentTradeRoute.sellWaypoint.symbol !== waypoint.symbol) {
-				marketsToGoTo.push(this.currentTradeRoute.sellWaypoint)
+			    this.currentTradeRoute.endingWaypoint.symbol !== waypoint.symbol) {
+				// only go to the sell location if we are out of cargo space, or not at the sell location
+				if (this.ship.cargo.capacity == this.ship.cargo.units ||
+					this.currentTradeRoute.startingWaypoint.symbol !== waypoint.symbol) {	
+					marketsToGoTo.push({waypoint: this.currentTradeRoute.endingWaypoint, speed: this.currentTradeRoute.route.steps[0].speed});
+				}
 				continue;
 			}
 			// dont sell anti matter, exotic matter or mounts
@@ -566,19 +586,31 @@ export class Bot {
 			// TODO: use findBestMarketToSellAll instead, but need to handle case of not considering sale of contract on con
 			let market = this.marketService.findBestMarketToSell(this.ship, waypoint, inv.symbol, inv.units, 0);
 			if (market) {
-				marketsToGoTo.push(market.sellWaypoint);
+				marketsToGoTo.push({waypoint: market.endingWaypoint, speed: market.route.steps[0].speed});
 			}
 		}
 		if (marketsToGoTo.length > 0) {
-			const waypoints = ExplorationService.sortWaypointsByDistanceFrom(marketsToGoTo, waypoint);
-			this.navigateTo(waypoints[0], 'CRUISE', `going to market ${waypoints[0].symbol} to sell items`);
+			let closestMarket = null;
+			let closestMarketDist = Infinity;
+			for (const market of marketsToGoTo) {
+				const dist = LocXY.getDistance(market.waypoint, waypoint);
+				if (dist < closestMarketDist) {
+					closestMarketDist = dist;
+					closestMarket = market;
+				}
+			}
+			if (closestMarket) {
+				this.navigateTo(closestMarket.waypoint, closestMarket.speed, `going to market ${closestMarket.waypoint.symbol} to sell items`);
+			}
 		}
 	}
 	
-	deliverAll(contract: Contract | null, constructionSite: ConstructionSite | null, onlyIfFull: boolean) {
+	deliverAll(contract: Contract | null, constructionSite: ConstructionSite | null, onlyIfFull: boolean, allowTravel: boolean) {
 		if (this.ship.nav.status === 'IN_TRANSIT' || this.ship.cargo.units === 0 || (!contract && !constructionSite)) {
 			return;
 		}
+		const locations = [];
+		// First, fulfill any contract or construction project at our current location
 		for (let inv of this.ship.cargo.inventory) {
 			if (inv.units <= 0) {
 				continue;
@@ -612,8 +644,23 @@ export class Bot {
 				if (system) {
 					const waypoint = system?.waypoints?.find((waypoint) => waypoint.symbol === destinationSymbol) || null;
 					if (waypoint) {
-						this.navigateTo(waypoint, null,
-										`going to ${waypoint.symbol} to deliver ${inv.symbol} ${inv.units} for ${destinationType}`);
+						locations.push({waypoint, inv, destinationType});
+					}
+				}
+			}
+		}
+		// Next, fulfill any contract or construction project at the next closest location
+		const curLoc = this.galaxyService.getWaypointByWaypointSymbol(this.ship.nav.waypointSymbol);
+		if (curLoc && allowTravel) {
+			const locs: WaypointBase[] = ExplorationService.sortWaypointsByDistanceFrom(locations.map(loc => loc.waypoint), curLoc);
+			while (locs.length > 0) {
+				const loc = locs.shift();
+				if (loc) {
+					const location = locations.filter(l => l.waypoint.symbol == loc.symbol);
+					if (location && location.length > 0) {
+						const inv = location[0].inv;
+						this.navigateTo(loc, null,
+										`going to ${loc.symbol} to deliver ${inv.symbol} ${inv.units} for ${location[0].destinationType}`);
 					}
 				}
 			}
@@ -868,8 +915,12 @@ export class Bot {
 		return loc;
 	}
 	
+	prepare() {
+		this.errorCount = 0;
+	}
+
 	onError(error: any) {
-		this.automationService.handleErrorMessage(error, this.ship.symbol);
+		this.automationService.handleErrorMessage(error, this.ship);
 		this.completeStep();
 		// We add two to the errorCount, because the call to completeStep decrements by 1, and we need to overcome that
 		this.errorCount += 2; 

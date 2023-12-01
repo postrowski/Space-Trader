@@ -1,12 +1,9 @@
-export class MarketTransaction {
-  waypointSymbol!: string;
-  shipSymbol!: string;
-  tradeSymbol!: string;
+import { Transaction } from "./Transaction";
+
+export class MarketTransaction extends Transaction {
   type!: string;
   units!: number;
   pricePerUnit!: number;
-  totalPrice!: number;
-  timestamp!: string;
 }
 
 export enum MarketTransactionType {

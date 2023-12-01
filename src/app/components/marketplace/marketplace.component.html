@@ -36,11 +36,19 @@
 			</div>
 			<div *ngIf="selectedTradeItem && xScale">
 				<h3>Historical Prices for {{selectedTradeItem.symbol}} at {{waypoint.symbol}}</h3>
-				<svg id="chart" width="450" height="305" xmlns="http://www.w3.org/2000/svg">
-					<rect x="0" y="0" width="400" height="300" fill="black"></rect>
+				<svg id="chart" width="450" [attr.height]="330 + tradeVolumes.length * 10" xmlns="http://www.w3.org/2000/svg">
+					<rect x="0" y="0" width="450" [attr.height]="330 + tradeVolumes.length * 10" fill="black"></rect>
+					<rect x="0" y="203" width="450" height="50" fill="#222222"></rect>
+					<rect x="0" y="263" width="450" height="50" fill="#222222"></rect>
+					<rect x="0" y="323" width="450" [attr.height]="20 + tradeVolumes.length * 10" fill="#222222"></rect>
 					<!-- vertical (time) lines -->
-					<g *ngFor="let x of [0, 100, 200, 300, 400]">
-						<line [attr.x1]="x" [attr.x2]="x" y1="0" y2="200" stroke="white" stroke-width=".5"></line> 
+					<g *ngFor="let date of markerDates; let index = index;">
+						<line [attr.x1]="getXCoordinate(date)"
+						      [attr.x2]="getXCoordinate(date)" y1="0" y2="200" stroke="white" stroke-width=".5"
+						      [attr.title]="'Date: ' + formatDate(date)"></line> 
+						<text [attr.x]="getXCoordinate(date)-10*(index/markerDates.length -1)" y="2" text-anchor="end" font-size="12" fill="#DDDDDD"
+					      [attr.transform]="'rotate(-90, ' + (getXCoordinate(date)-10*(index/markerDates.length -1)) + ', 2)'">
+						{{formatDateShort(date)}}</text> 
 					</g>
 					<!-- horizontal (price) lines -->
 					<g *ngFor="let y of [0, 50, 100, 150, 200]">
@@ -48,16 +56,26 @@
 						<text x="405" [attr.y]="getYCoordinate(y * maxPrice / 200) + y/25" font-size="12" fill="#888888">{{formatPrice(y * maxPrice / 200)}}</text> 
 					</g>
 					<g *ngFor="let supply of ['ABUNDANT','HIGH','MODERATE','LIMITED','SCARCE']">
-						<line x1="0" x2="400" [attr.y1]="250 - 10*getYCoordinateSupply(supply)" [attr.y2]="250 - 10*getYCoordinateSupply(supply)" stroke="grey" stroke-width=".5"></line>
+						<line x1="0" x2="400"
+						[attr.y1]="250 - 10*getYCoordinateSupply(supply)" 
+						[attr.y2]="250 - 10*getYCoordinateSupply(supply)" stroke="grey" stroke-width=".5"></line>
 						<text x="405" [attr.y]="252 - 10*getYCoordinateSupply(supply)" font-size="10" fill="#888888">{{supply.toLowerCase()}}</text> 
 					</g>
 					<g *ngFor="let activity of ['STRONG','GROWING','STATIC','WEAK','RESTRICTED']">
-						<line x1="0" x2="400" [attr.y1]="300 - 10*getYCoordinateActivity(activity)" [attr.y2]="300 - 10*getYCoordinateActivity(activity)" stroke="grey" stroke-width=".5"></line>
-						<text x="405" [attr.y]="302 - 10*getYCoordinateActivity(activity)" font-size="10" fill="#888888">{{activity.toLowerCase()}}</text> 
+						<line x1="0" x2="400"
+						 [attr.y1]="310 - 10*getYCoordinateActivity(activity)"
+						 [attr.y2]="310 - 10*getYCoordinateActivity(activity)" stroke="grey" stroke-width=".5"></line>
+						<text x="405" [attr.y]="310 - 10*getYCoordinateActivity(activity)" font-size="10" fill="#888888">{{activity.toLowerCase()}}</text> 
+					</g>
+					<g *ngFor="let volume of tradeVolumes; let index = index">
+						<line x1="0" x2="400"
+						[attr.y1]="317 + 10*(tradeVolumes.length - index)" 
+						[attr.y2]="317 + 10*(tradeVolumes.length - index)" stroke="grey" stroke-width=".5"></line>
+						<text x="405" [attr.y]="320 + 10*(tradeVolumes.length - index)" font-size="10" fill="#888888">{{volume}}</text> 
 					</g>
 					<!-- purchase/sell price data points -->
 					<g *ngFor="let item of itemHistory; let i = index">
-						<circle r="2" fill="blue"  
+						<circle r="2" fill="blue"
 						    [attr.cx]="getXCoordinate(item.timestamp)"
 							[attr.cy]="getYCoordinate(item.purchasePrice)">
 							<title>Purchase price: {{item.purchasePrice | currency : 'USD' : 'symbol' : '1.0-0'}}
@@ -88,10 +106,15 @@ Date: {{formatDate(item.timestamp)}}</title>
 								stroke="white" stroke-width="1"></line>
 							<line
 								x1="0" x2="400"
-								[attr.y1]="300 - 10*getYCoordinateActivity(itemHistory[i].activity)"
-								[attr.y2]="300 - 10*getYCoordinateActivity(itemHistory[i].activity)"
+								[attr.y1]="310 - 10*getYCoordinateActivity(itemHistory[i].activity)"
+								[attr.y2]="310 - 10*getYCoordinateActivity(itemHistory[i].activity)"
 								[attr.stroke]="getColorActivity(itemHistory[i].activity)"
 								stroke-width="1"></line>
+							<line
+								x1="0" x2="400"
+								[attr.y1]="317 + 10*(tradeVolumes.length - tradeVolumes.indexOf(itemHistory[i].tradeVolume))" 
+								[attr.y2]="317 + 10*(tradeVolumes.length - tradeVolumes.indexOf(itemHistory[i].tradeVolume))"
+								stroke="white" stroke-width="1"></line>
 						</g>
 						<!-- lines between each point -->
 						<g *ngIf="i>0">
@@ -116,11 +139,33 @@ Date: {{formatDate(item.timestamp)}}</title>
 							<line
 								[attr.x1]="getXCoordinate(itemHistory[i].timestamp)"
 								[attr.x2]="getXCoordinate(itemHistory[i - 1].timestamp)"
-								[attr.y1]="300 - 10*getYCoordinateActivity(itemHistory[i].activity)"
-								[attr.y2]="300 - 10*getYCoordinateActivity(itemHistory[i - 1].activity)"
+								[attr.y1]="310 - 10*getYCoordinateActivity(itemHistory[i].activity)"
+								[attr.y2]="310 - 10*getYCoordinateActivity(itemHistory[i - 1].activity)"
 								[attr.stroke]="getColorActivity(itemHistory[i].activity)"
 								stroke-width="1"></line>
+							<line
+								[attr.x1]="getXCoordinate(itemHistory[i].timestamp)"
+								[attr.x2]="getXCoordinate(itemHistory[i - 1].timestamp)"
+								[attr.y1]="317 + 10*(tradeVolumes.length - tradeVolumes.indexOf(itemHistory[i].tradeVolume))" 
+								[attr.y2]="317 + 10*(tradeVolumes.length - tradeVolumes.indexOf(itemHistory[i-1].tradeVolume))"
+								stroke="white" stroke-width="1"></line>
 						</g>
+					</g>
+					<g *ngFor="let transaction of selectedTransactions; let i = index">
+						<circle r="5" fill="#FF8888" *ngIf="transaction.type == 'SELL'"  
+						    [attr.cx]="getXCoordinateTransaction(transaction)"
+							[attr.cy]="getYCoordinate(transaction.pricePerUnit)">
+							<title>Sell price: {{transaction.pricePerUnit | currency : 'USD' : 'symbol' : '1.0-0'}}
+Quantity: {{transaction.units}}
+Date: {{formatDateTransaction(transaction)}}</title>
+						</circle>
+						<circle r="5" fill="#8888FF" *ngIf="transaction.type == 'PURCHASE'"  
+						    [attr.cx]="getXCoordinateTransaction(transaction)"
+							[attr.cy]="getYCoordinate(transaction.pricePerUnit)">
+							<title>Purchase price: {{transaction.pricePerUnit | currency : 'USD' : 'symbol' : '1.0-0'}}
+Quantity: {{transaction.units}}
+Date: {{formatDateTransaction(transaction)}}</title>
+						</circle>
 					</g>
 				</svg>
 			</div>

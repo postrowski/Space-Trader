@@ -54,30 +54,24 @@ export class TradeManager extends Manager {
 	}
 	
 	doStep(bot: Bot, system: System, waypoint: WaypointBase, credits: number): void {
-		
-		const stepStart = Date.now();
-		const isDebrisField  = WaypointBase.isDebrisField(waypoint);
-		const hasMarketplace = WaypointBase.hasMarketplace(waypoint);
-		const isAsteroid     = WaypointBase.isAsteroid(waypoint);
-		const isGasGiant     = WaypointBase.isGasGiant(waypoint);
-
-		const otherShipsAtWaypoint = this.otherShipsAtWaypoint(bot);
+		const isDebrisField        = WaypointBase.isDebrisField(waypoint);
+		const hasMarketplace       = WaypointBase.hasMarketplace(waypoint);
+		const isAsteroid           = WaypointBase.isAsteroid(waypoint);
+		const isGasGiant           = WaypointBase.isGasGiant(waypoint);
+     	const otherShipsAtWaypoint = this.otherShipsAtWaypoint(bot);
 
 		if (this.contract || this.constructionSite) {
 			// If this is a drone or a probe, it doesn't make sense to have it making contract/construction runs.
 			if (bot.ship.cargo.capacity > 20 && (bot == this.contractBot || this.constructionBots.includes(bot))) {
-				bot.deliverAll(this.contract, this.constructionSite, true);
+				bot.deliverAll(this.contract, this.constructionSite, true, true);
 			}
 		}
-		const step1 = Date.now();
-		let step2 = Date.now();
-		let step3 = Date.now();
+		
 		let checkedContracts = false;
-		if ((bot == this.contractBot || this.constructionBots.includes(bot))) {
+		if ((bot == this.contractBot || this.constructionBots.includes(bot)) &&
+		    (bot.currentTradeRoute == null)) {
 			bot.sellAtBestLocation(waypoint, this.contract, this.constructionSite, otherShipsAtWaypoint);
-			step2 = Date.now();
 			let waypointDest = this.buyContractAndConstructionGoods(bot, waypoint, credits);
-			step3 = Date.now();
 			checkedContracts = true;
 			if (waypointDest) {
 				const dest = this.galaxyService.getWaypointByWaypointSymbol(waypointDest);
@@ -87,17 +81,10 @@ export class TradeManager extends Manager {
 			}
 		}
 
-		const step4 = Date.now();
-		let res;
-		let tries = 0;
-		do 	{
-			res = this.trade(bot, waypoint, credits, this.shipBots, otherShipsAtWaypoint);
-		} while (res == 'retry' && (tries++ < 5));
+		const res = this.trade(bot, waypoint, credits, this.shipBots, otherShipsAtWaypoint);
         if (res == 'wait') {
 			return;
 		}
-
-		const step5 = Date.now();
 
 		if (isAsteroid || isDebrisField) {
 			let surveys = this.surveyService.getSurveysForWaypoint(waypoint);
@@ -113,8 +100,6 @@ export class TradeManager extends Manager {
 			// If we have less than 10 spaces for stuff, get rid of stuff we can't sell for a profit.
 			bot.consolidateCargo(otherShipsAtWaypoint);
 		}
-
-		const step6 = Date.now();
 		
 		let roomToMine = bot.ship.cargo.units < bot.ship.cargo.capacity;
 		if (roomToMine) {
@@ -153,18 +138,10 @@ export class TradeManager extends Manager {
 			if (this.contract || this.constructionSite) {
 				// If this is a drone or a probe, it doesn't make sense to have it making contract/construction runs.
 				if (bot.ship.cargo.capacity > 20 && (bot == this.contractBot || this.constructionBots.includes(bot))) {
-					bot.deliverAll(this.contract, this.constructionSite, false);
+					bot.deliverAll(this.contract, this.constructionSite, false, true);
 				}
 			}
 		}
-		const end = Date.now();
-		console.log(`trade manager, ship ${bot.ship.symbol}:`+
-		            ` step1 took ${step1 - stepStart},`+
-		            ` step2 took ${step2 - step1},`+
-		            ` step3 took ${step3 - step2},`+
-		            ` step4 took ${step4 - step3},`+
-		            ` step5 took ${step5 - step4},`+
-		            ` step6 took ${end - step5}`);
 	}
 	
 	buyContractAndConstructionGoods(bot: Bot, waypoint: WaypointBase, credits: number): string | null {
@@ -178,11 +155,11 @@ export class TradeManager extends Manager {
 		let constructionAllowed = this.constructionBots.includes(bot) && (credits > 100_000);
 		if (this.constructionSite && constructionAllowed) {
 			for (const material of this.constructionSite.materials) {
-				if (material.required > material.fulfilled) {
+				const units = material.required - material.fulfilled;
+				if (units > 0) {
 					itemsToBuy.push({
 						symbol: material.tradeSymbol,
-						units: material.required - material.fulfilled,
-						itemFor: 'construction Site',
+						units, itemFor: 'construction Site',
 						deliverTo: this.constructionSite.symbol
 					});
 				}
@@ -190,72 +167,48 @@ export class TradeManager extends Manager {
 		}
 		if (this.contract && contractAllowed) {
 			for (const goods of this.contract.terms.deliver) {
-				if (goods.unitsRequired > goods.unitsFulfilled) {
+				const units = goods.unitsRequired - goods.unitsFulfilled;
+				if (units > 0) {
 					itemsToBuy.push({
 						symbol: goods.tradeSymbol,
-						units: goods.unitsRequired - goods.unitsFulfilled,
-					 	itemFor: 'contract',
+						units, itemFor: 'contract',
 						deliverTo: goods.destinationSymbol
 					});
 				}
 			}
 		}
 		const sinceTime = Date.now() - 6 * 60 * 60 * 1000; // last 6 hours
-		for (const itemToBuy of itemsToBuy) {
-			const currentPrices: Map<string, UiMarketItem> = this.marketService.getPricesForItemInSystemByWaypointSymbol(waypoint.symbol, itemToBuy.symbol);
-			const lowPrice = this.marketService.getItemHistoricalLowPriceAtMarket(waypoint.symbol, itemToBuy.symbol, sinceTime);
-			if (currentPrices == null || currentPrices.size == 0) {
-				continue;
-			}
-			let minPrice = Infinity;
-			for (let item of currentPrices.values()) {
-				// If the current purchase price is within 200% of the lowest price seen lately, we can buy it
-				let tooExpensive = (item.purchasePrice > (lowPrice * 2));
-				
-				// never buy items that are SCARCE or LIMITED, the prices will be too high
-				if (item.supply == 'ABUNDANT' || item.supply == 'HIGH' || item.supply == 'MODERATE' || !tooExpensive) {
-					if (item.purchasePrice < minPrice) {
-						minPrice = item.purchasePrice;
-					}
-				}
-			}
-			if (minPrice == Infinity) {
-				// we didn't find a good (non SCAECE/LIMITED) source
-				continue;
-			}
-
-			//const lowPrice = this.marketService.getItemHistoricalLowPriceAtMarket(waypoint.symbol, itemToBuy.symbol, sinceTime);
-			let tooExpensive = false;//(minPrice > (lowPrice * 3));
-			if (tooExpensive || (credits < minPrice)) {
-				console.log(`Contract/construction item ${itemToBuy.symbol} too expensive at ${minPrice}`);
-				continue;
-			}
-			
-			if (itemToBuy.units > 0) {
-				for (let inv of bot.ship.cargo.inventory) {
-					if (itemToBuy.symbol == inv.symbol) {
-						itemToBuy.units -= inv.units;
-						break;
-					}
-				}
-				// Don't buy any items that drop our credit below half its current value.
-				if ((itemToBuy.units * minPrice) > (credits / 2)) {
-					itemToBuy.units = Math.floor(credits / (2 * minPrice));
-				}
-				if (itemToBuy.units <= 0) {
-					// We have all the items we need, go deliver them now
-					this.addMessage(bot, `going to ${itemToBuy.deliverTo} to deliver ${itemToBuy.itemFor} ${itemToBuy.symbol}`);
-					return itemToBuy.deliverTo;
-				}
-			}
-		}
 		let closestItem = null;
 		let closestDist = Infinity;
 		let closestMarket = null;
 		let closestMarketItem = null;
 		for (const itemToBuy of itemsToBuy) {
-			const marketItem: UiMarketItem | null = this.marketService.findCheapestMarketItemForSaleInSystem(waypoint, itemToBuy.symbol, itemToBuy.units);
-			if (marketItem?.supply == 'ABUNDANT' || marketItem?.supply == 'HIGH' || marketItem?.supply == 'MODERATE') { 
+			const marketItem: UiMarketItem | null = this.marketService.findCheapestMarketItemForSaleInSystem(waypoint, itemToBuy.symbol, itemToBuy.units, false);
+			if (!marketItem) {
+				continue;
+			}
+			const lowPrice = this.marketService.getItemHistoricalLowPriceAtMarket(marketItem.marketSymbol, itemToBuy.symbol, sinceTime);
+			// If the current purchase price is within 200% of the lowest price seen lately, we can buy it
+			if (marketItem.purchasePrice > (lowPrice * 2)) {
+				// we didn't find a good (non SCAECE/LIMITED) source
+				continue;
+			}
+
+			const currentQty = bot.ship.cargo.inventory.find(inv => itemToBuy.symbol === inv.symbol)?.units || 0;
+			itemToBuy.units -= currentQty;
+			
+			// Don't buy any items that drop our credit below half its current value.
+			const maxWeCouldbuy = Math.floor((credits / 2) / marketItem.purchasePrice);
+			if (itemToBuy.units > maxWeCouldbuy) {
+				console.log(`Contract/construction item ${itemToBuy.symbol} too expensive at ${marketItem.purchasePrice}`);
+				itemToBuy.units = maxWeCouldbuy;
+			}
+			if ((itemToBuy.units == 0) && (currentQty > 0)) {
+				// We have all the items we need (and can afford), go deliver them now
+				this.addMessage(bot, `going to ${itemToBuy.deliverTo} to deliver ${itemToBuy.itemFor} ${itemToBuy.symbol}`);
+				return itemToBuy.deliverTo;
+			}
+			if (marketItem && itemToBuy.units > 0) { 
 				const supplierMarket = this.galaxyService.getWaypointByWaypointSymbol(marketItem.marketSymbol);
 				if (supplierMarket) {
 					const distForItem = LocXY.getDistance(waypoint, supplierMarket);
@@ -277,51 +230,6 @@ export class TradeManager extends Manager {
 			bot.purchaseCargo(closestItem.symbol, closestItem.units);
 		}
 		return null;
-	}
-
-
-	getBestSurveyToUse(waypoint: WaypointBase, surveys: Survey[]): Survey | undefined {
-		const surveyAverages: { [symbol: string]: number } = {};
-
-		const aveFuelCost = this.marketService.getAverageFuelCost(waypoint.symbol)
-		// Calculate average price per unit for each survey
-		surveys.forEach((survey) => {
-			const sum = survey.deposits.reduce((total, deposit) => {
-				const nearestMarket = this.marketService.getNearestMarketInSystemThatTradesItem(waypoint, deposit.symbol);
-				if (!nearestMarket) return total;
-
-				const distance = LocXY.getDistance(nearestMarket, waypoint);
-				const fuelCost = distance * 2 * aveFuelCost / 20;
-				const marketItem = this.marketService.getItemAtMarket(nearestMarket.symbol, deposit.symbol);
-				if (!marketItem) return total;
-
-				let value = marketItem.sellPrice;
-/*				if (this.contract && ContractService.getContractDeliverable(deposit.symbol, this.contract)) {
-					// Favor surveys that lead to resources needed for a contract
-					return total + value * 2 - fuelCost;
-				}
-*/
-				return total + value - fuelCost;
-			}, 0);
-
-			const averagePrice = sum / survey.deposits.length;
-			surveyAverages[survey.symbol] = isNaN(averagePrice) ? 0 : averagePrice;
-		});
-
-		// Find the survey with the highest average price per unit
-		let highestAverageSurvey: Survey | undefined;
-		let highestAveragePrice = -Infinity;
-
-		for (const survey of surveys) {
-			const averagePrice = surveyAverages[survey.symbol];
-
-			if (averagePrice > highestAveragePrice) {
-				highestAverageSurvey = survey;
-				highestAveragePrice = averagePrice;
-			}
-		}
-
-		return highestAverageSurvey;
 	}
 
 	trade(bot: Bot, waypoint: WaypointBase, creditsAvailable: number,
@@ -390,7 +298,7 @@ export class TradeManager extends Manager {
 				}
 				if (bestLocalRoute && bestRoute && bestLocalRoute != bestRoute) {
 					// If the local route takes us at least 75% closer to the start of the best route, do it first:
-					const localRouteEnd = bestLocalRoute.sellWaypoint;
+					const localRouteEnd = bestLocalRoute.endingWaypoint;
 					const bestRouteStart = bestRoute.startingWaypoint;
 					const currentDistToBestStart = LocXY.getDistance(waypoint, bestRouteStart);
 					const localRouteEndDistToBestStart = LocXY.getDistance(localRouteEnd, bestRouteStart);
@@ -402,10 +310,12 @@ export class TradeManager extends Manager {
 				const botSupport = bot.getBestMinerToSupport(waypoint, system, fuelPricesByWaypointSymbol, allShips);
 				if (botSupport && (bestRoute == null || bestRoute.profitPerSecond < botSupport.sellPlan.profitPerSecond)) {
 					bestRoute = {
+						state: 'collect',
 						startingWaypoint: botSupport.waypoint,
-						sellWaypoint: botSupport.sellPlan.sellWaypoint,
+						endingWaypoint: botSupport.sellPlan.endingWaypoint,
 						buyItem: null,
 						sellItems: botSupport.sellPlan.sellItems,
+						deliverItems: [],
 						profit: botSupport.sellPlan.profit,
 						route: botSupport.sellPlan.route,
 						profitPerSecond: botSupport.sellPlan.profitPerSecond,
@@ -420,12 +330,12 @@ export class TradeManager extends Manager {
 					this.addMessage(bot, `Creating trade route, trading ${bestRoute.sellItems.map(i =>i.symbol)}`+
 					                     ` from ${bestRoute.buyItem?.marketSymbol || bestRoute.startingWaypoint}`+
 					                     ` at $${bestRoute.buyItem?.purchasePrice || 0}`+
-					                     ` to ${bestRoute.sellWaypoint.symbol} at`+
+					                     ` to ${bestRoute.endingWaypoint.symbol} at`+
 					                     ` $${bestRoute.sellItems.map(i => i.sellPrice)},`+
 					                     ` for a profit of ${bestRoute.profit} ${via}` 
 					                     );
 					bot.currentTradeRoute = bestRoute;
-					bot.tradeRouteState = 'goBuy';
+					bot.currentTradeRoute.state = 'goBuy';
 				}
 			} else {
 				// We don't have a trade route, but we have no space to buy anything new.
@@ -437,111 +347,6 @@ export class TradeManager extends Manager {
 			return 'fail';
 		}
 
-		const invItems = bot.ship.cargo.inventory
-		                    .filter((inv) => bot.currentTradeRoute?.sellItems.some(i => i.symbol === inv.symbol));
-		const itemCount = (invItems && invItems.length == 1) ? invItems[0].units : 0;
-		
-		if (bot.tradeRouteState == 'goBuy') {
-			if (waypoint.symbol == bot.currentTradeRoute.buyItem?.marketSymbol) {
-				bot.tradeRouteState = 'buy';
-			} else if (waypoint.symbol == bot.currentTradeRoute.startingWaypoint.symbol) {
-				bot.tradeRouteState = 'collect';
-			} else {
-				const curRouteBuyWaypointSymbol = bot.currentTradeRoute.buyItem?.marketSymbol || bot.currentTradeRoute.startingWaypoint.symbol;
-				// go to the 'buy' location
-				const market = system.waypoints.find((wp) => wp.symbol == curRouteBuyWaypointSymbol);
-				if (market && market.symbol !== waypoint.symbol) {
-					let via = '';
-					if (bot.currentTradeRoute.route.steps.length > 1) { 
-						via = (' (via ' + bot.currentTradeRoute.route.steps.map(s=>s.loc.symbol)+')');
-					}
-					bot.navigateTo(market, bot.currentTradeRoute.route.steps[0].speed,
-									`Going to ${market.symbol} to buy trade item`+
-									`${via} ${bot.currentTradeRoute.sellItems.map(i => i.symbol)} for $${bot.currentTradeRoute.profit}`);
-				}
-			}
-		}
-		if (bot.tradeRouteState == 'buy' && bot.currentTradeRoute.buyItem?.marketSymbol == bot.ship.nav.waypointSymbol) {
-			// We are at the 'buy' location, buy until we have no room or money, and then go to the 'sell' location
-			if (space == 0 || (this.automationService.agent?.credits || 0) < bot.currentTradeRoute.buyItem.purchasePrice) {
-				bot.tradeRouteState = 'goSell';
-			} else if (bot.ship.nav.status != 'IN_TRANSIT') {
-				const currentItem = this.marketService.getItemAtMarket(bot.currentTradeRoute.buyItem.marketSymbol, bot.currentTradeRoute.buyItem.symbol);
-				const sellItems = bot.currentTradeRoute.sellItems.filter(i => i.symbol == currentItem?.symbol);
-				// make sure the item purchase price is still cheaper than the sell price
-				if (currentItem && sellItems && sellItems.length > 0 &&
-				   (currentItem.purchasePrice < sellItems[0].sellPrice) &&
-				    bot.ship.cargo.units < bot.ship.cargo.capacity) {
-					if (currentItem.purchasePrice < 1) {
-						// Wait here until we get filled by the minning bot
-					} else {
-						this.addMessage(bot, `at market ${waypoint.symbol} to start of trade route.`+
-						                     ` Buying ${space} ${bot.currentTradeRoute.buyItem.symbol}.`);
-						bot.purchaseCargo(bot.currentTradeRoute.buyItem.symbol, space);
-					}
-				} else {
-					this.addMessage(bot, `Costs of trade item ${bot.currentTradeRoute.buyItem.symbol}`+
-					                     ` at ${bot.currentTradeRoute.buyItem.marketSymbol}`+
-					                     ` have changed from ${bot.currentTradeRoute.buyItem.purchasePrice}`+
-					                     ` to ${currentItem?.purchasePrice},`+
-					                     ` which exceeds the current sell price of $${sellItems[0].sellPrice},`+
-					                     ` aborting trade route!`);
-					if (itemCount == 0) {
-						bot.currentTradeRoute = null;
-						bot.tradeRouteState = '';
-						return 'retry';
-					}
-					bot.tradeRouteState = 'goSell';
-				}
-			}
-		}
-		if (bot.tradeRouteState == 'collect' && bot.currentTradeRoute.startingWaypoint.symbol == bot.ship.nav.waypointSymbol) {
-			// We are at the 'collect' location, buy until we have no room, and then go to the 'sell' location
-			if (space == 0) {
-				bot.tradeRouteState = 'goSell';
-			} else if (bot.ship.nav.status != 'IN_TRANSIT') {
-				// wait here until our cargo gets filled up by a miner.
-				if (otherShipsAtWaypoint.length == 0) {
-					// If there are no longer any mining ships here, we should go sell what we've got.
-					bot.tradeRouteState = 'goSell';
-				}
-			}
-		}
-		if (bot.tradeRouteState == 'goSell') {
-			if (bot.currentTradeRoute.sellWaypoint.symbol == waypoint.symbol) {
-				bot.tradeRouteState = 'sell';
-			} else {
-				if ((space > 0) && (itemCount == 0)) {
-					// We don't we the item to sell. Maybe we didn't have enough money to buy the item when we got here?
-					// Wait until we have at least something!
-					bot.tradeRouteState = 'goBuy';
-					return 'wait';
-				}
-				// go to the 'sell' location
-				const market = system.waypoints.find((wp) => wp.symbol == bot.currentTradeRoute!.sellWaypoint.symbol);
-				if (market && market.symbol !== waypoint.symbol) {
-					let via = '';
-					if (bot.currentTradeRoute.route.steps.length > 1) { 
-						via = (' (via ' + bot.currentTradeRoute.route.steps.map(s=>s.loc.symbol)+')');
-					}
-					bot.navigateTo(market, bot.currentTradeRoute.route.steps[0].speed,
-									`Going to ${bot.currentTradeRoute.sellWaypoint.symbol}`+
-									`${via} to sell trade item ${bot.currentTradeRoute.sellItems.map(i => i.symbol)}`+
-									` for $${bot.currentTradeRoute.profit}`);
-				}
-			}
-		}
-		if (bot.tradeRouteState == 'sell' && bot.currentTradeRoute.sellWaypoint.symbol == bot.ship.nav.waypointSymbol) {
-			// We are at the 'sell' location.
-			if (itemCount == 0) {
-				bot.currentTradeRoute = null;
-				bot.tradeRouteState = '';
-				return 'retry';
-			}
-			this.addMessage(bot, `market ${waypoint.symbol} end of trade route to sell ${bot.currentTradeRoute.sellItems.map(i => i.symbol)}.`);
-			bot.sellCargo(invItems[0].symbol, invItems[0].units);
-		}
-		return 'fail';
-	}
-	
+		return this.executeTradeRoute(bot, waypoint, system, otherShipsAtWaypoint);
+	}	
 }

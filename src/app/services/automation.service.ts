@@ -3,7 +3,6 @@ import { BehaviorSubject, Observable } from 'rxjs';
 import { Agent } from 'src/models/Agent';
 import { Contract } from 'src/models/Contract';
 import { Ship } from 'src/models/Ship';
-import { Shipyard } from 'src/models/Shipyard';
 import { System } from 'src/models/System';
 import { WaypointBase} from 'src/models/WaypointBase';
 import { Bot, Role } from '../utils/bot';
@@ -25,7 +24,7 @@ import { TradeManager } from '../utils/trade-manager';
 import { MineManager } from '../utils/mine-manager';
 import { Manager } from '../utils/manager';
 import { PairManager } from '../utils/pair-manager';
-import { ShipyardShip } from 'src/models/ShipyardShip';
+import { ConstructionManager } from '../utils/construction-manager';
 
 @Injectable({
 	providedIn: 'root'
@@ -56,6 +55,7 @@ export class AutomationService {
 	tradeManager: TradeManager | null = null;
 	pairManagers: PairManager[] = [];
 	mineManager: MineManager | null = null;
+	constructionManager: ConstructionManager | null = null;
 	managers: Manager[] = [];
 	executionSteps: {timeElapsed: number, ship: string, manager: string, operation: string}[] = [];
 		
@@ -74,9 +74,11 @@ export class AutomationService {
 		this.marketManager = new MarketManager(this, 'mark');
 		this.tradeManager = new TradeManager(this, 'trade');
 		this.mineManager = new MineManager(this, 'mine');
+		this.constructionManager = new ConstructionManager(this, 'const');
 		this.managers.push(this.marketManager);
 		this.managers.push(this.tradeManager);
 		this.managers.push(this.mineManager);
+		this.managers.push(this.constructionManager);
 		this.fleetService.allShips$.subscribe((ships) => {
 			for (let ship of ships) {
 				let found = false;
@@ -135,6 +137,7 @@ export class AutomationService {
 		this.tradeManager = null;
 		this.pairManagers = [];
 		this.mineManager = null;
+		this.constructionManager = null;
 		this.managers = [];
 		this.executionSteps = [];
 		this.fleetService.onServerReset();
@@ -150,7 +153,7 @@ export class AutomationService {
 		this.dbService.onServerReset();
 	}
 		
-	handleErrorMessage(error: any, shipSymbol: string | null) {
+	handleErrorMessage(error: any, ship: Ship | null) {
 		while (error.error) {
 			error = error.error;
 		}
@@ -165,15 +168,21 @@ export class AutomationService {
 		if (message.includes("insufficient funds") ||
 		    message.includes("agent does not have sufficient credits to purchase")) {
 			this.refreshAgent = true;
+			if (ship) {
+				this.refreshMarkets.push(ship.nav.waypointSymbol);
+			}
 		}
 		if (message.includes("ship is not currently ")) { // "...in orbit" or "...docked"
-			this.refreshShips = shipSymbol || 'All';
+			this.refreshShips = ship?.symbol || 'All';
 		}
 		if (message.includes("cargo does not contain")) {// "Failed to update ship cargo. Ship BLACKRAT-1 cargo does not contain 35 unit(s) of PLATINUM. Ship has 0 unit(s) of PLATINUM."
-			this.refreshShips = shipSymbol || 'All';
+			this.refreshShips = ship?.symbol || 'All';
 		}
 		if (message.includes("ship is currently ")) { // "ship is currently in-transit...
-			this.refreshShips = shipSymbol || 'All';
+			this.refreshShips = ship?.symbol || 'All';
+		}
+		if (message.includes("failed to update ship cargo.")) {
+			this.refreshShips = ship?.symbol || 'All';
 		}
 		if (message.includes("you have reached your api limit.")) {
 			this.pauseOperationsTill = Date.now() + 30 * 1000;
@@ -192,7 +201,7 @@ export class AutomationService {
 				}
 			}
 			if (!found) {
-				this.refreshShips = shipSymbol || 'All';
+				this.refreshShips = ship?.symbol || 'All';
 			}
 		}
 	}
@@ -250,6 +259,10 @@ export class AutomationService {
 			this.contractService.getAllContracts();
 		}
 		this.errorCount = 0;
+		
+		for (const bot of this.shipBots) {
+			bot.prepare();
+		}
 	}
 
 	step() {
@@ -272,7 +285,6 @@ export class AutomationService {
 			}
 			if (this.refreshShips) {
 				const ships = this.refreshShips; 
-				this.refreshShips = '';
 				this.doRefreshShips(ships);
 			}
 			if (this.refreshWaypoints) {
@@ -308,8 +320,10 @@ export class AutomationService {
 			for (const bot of this.shipBots) {
 				if (bot.manager == null) {
 					if (bot.role == Role.Explorer && this.marketManager) {
+						this.addMessage(bot.ship, `Adding ship ${bot.ship.symbol} to market manager`);
 						this.marketManager.addBot(bot);
 					} else if ((bot.role == Role.Miner || bot.role == Role.Siphon) && this.mineManager) {
+						this.addMessage(bot.ship, `Adding ship ${bot.ship.symbol} to mine manager`);
 						this.mineManager.addBot(bot);
 					} else if (bot.role == Role.Surveyor) {
 						for (const pairManager of this.pairManagers) {
@@ -319,8 +333,15 @@ export class AutomationService {
 								break;
 							}
 						}
-					} else if (this.tradeManager) {
-						this.tradeManager.addBot(bot);
+					} else if (this.tradeManager && this.constructionManager) {
+						if ((this.tradeManager.shipBots.length/3) > this.constructionManager.shipBots.length &&
+							this.constructionManager.shipBots.length < 1) {
+							this.addMessage(bot.ship, `Adding ship ${bot.ship.symbol} to construction manager`);
+							this.constructionManager.addBot(bot);
+						} else {
+							this.addMessage(bot.ship, `Adding ship ${bot.ship.symbol} to trade manager`);
+							this.tradeManager.addBot(bot);
+						}
 					}
 					
 					if (this.mineManager && this.tradeManager && 
@@ -329,13 +350,14 @@ export class AutomationService {
 						const mineBot = this.mineManager.shipBots[this.mineManager.shipBots.length-1];
 						const tradeBot = this.tradeManager.shipBots[this.tradeManager.shipBots.length-1];
 						let fail = true;
-						if (this.mineManager.removeBot(mineBot)) {
+						if (mineBot && tradeBot && this.mineManager.removeBot(mineBot)) {
 							if (this.tradeManager.removeBot(tradeBot)) {
 								const pairManager = new PairManager(this, 'pair' + this.pairManagers.length);
-								if (pairManager.addBot(mineBot!) && pairManager.addBot(tradeBot!)) {
+								if (pairManager.addBot(mineBot) && pairManager.addBot(tradeBot)) {
 									this.pairManagers.push(pairManager);
 									this.managers.push(pairManager);
-									this.addMessage(tradeBot!.ship, `Pairing hauler ship ${tradeBot!.ship.symbol} with miner ${mineBot!.ship.symbol} in pair ${pairManager.key}`);
+									this.addMessage(tradeBot.ship, `Pairing hauler ship ${tradeBot.ship.symbol} with miner ${mineBot.ship.symbol} in pair ${pairManager.key}`);
+									this.addMessage(mineBot.ship, `Pairing hauler ship ${tradeBot.ship.symbol} with miner ${mineBot.ship.symbol} in pair ${pairManager.key}`);
 									fail = false;
 								} else {
 									pairManager.removeBot(tradeBot);
@@ -343,9 +365,9 @@ export class AutomationService {
 								}
 							}
 						}
-						if (fail) {
-							this.mineManager.addBot(mineBot!);
-							this.tradeManager.addBot(tradeBot!);
+						if (mineBot && tradeBot && fail) {
+							this.mineManager.addBot(mineBot);
+							this.tradeManager.addBot(tradeBot);
 						}
 					}
 				}
@@ -387,16 +409,20 @@ export class AutomationService {
 			this.galaxyService.getNextPageOfWaypoints();
 		} catch (error) {
 			if (error instanceof ExecutionStep) {
+				const step = error as ExecutionStep;
 				executionStep.operation = error.key;
-				if (error.bot?.ship) {
-					executionStep.ship = 'S-' + error.bot.ship.symbol.split('-')[1];
-					const shipSymbol = error.bot.ship.symbol;
-					this.shipOperationBySymbol.set(shipSymbol, error);
+				if (step && step.bot?.ship) {
+					executionStep.ship = '🛦 ' + step.bot.ship.symbol.split('-')[1];
+					const shipSymbol = step.bot.ship.symbol;
+					this.shipOperationBySymbol.set(shipSymbol, step);
 					const shipOperationBySymbol = this.shipOperationBySymbol;
+					const me = this;
 					setTimeout(function() {
-						if (shipOperationBySymbol.get(shipSymbol) == error) {
+						if (shipOperationBySymbol.get(shipSymbol) == step) {
 							shipOperationBySymbol.delete(shipSymbol);
-						  	console.error(`Command '${error}' still not cleared after 10 seconds.`);
+							const message = `Command '${step}' still not cleared after 10 seconds.`;
+						  	me.addMessage(step.bot?.ship || null, message);
+						  	console.error(message);
 						}
 					}, 10_000);
 				}
@@ -454,15 +480,23 @@ export class AutomationService {
 		throw step;
 	}
 	doRefreshShips(shipSymbol: string) {
+		if (this.refreshShips === 'InProgess') {
+			// just wait until the response comes back, which will change the value of this.refreshShips
+			throw new ExecutionStep(null, `waiting for all ships refresh`, 'ships');
+		}
 		const step = new ExecutionStep(null, `refreshing ship(s) ${shipSymbol}`, 'ships');
 		if (shipSymbol === 'All') {
+			this.refreshShips = 'InProgess';
 			this.fleetService.updateFleet()
 			                 .subscribe((response) => {
 				this.completeStep(step);
+				this.refreshShips = '';
 			}, (error) => {
 				this.onError(error, step);
+				this.refreshShips = 'All';
 			});
 		} else {
+			this.refreshShips = '';
 			this.fleetService.getShip(shipSymbol)
 			                 .subscribe((response) => {
 				this.completeStep(step);
@@ -557,28 +591,47 @@ export class AutomationService {
 	probe = {frame:'FRAME_PROBE', mount: ''};
 	miner = {frame:'FRAME_DRONE', mount: 'MOUNT_MINING_LASER_I'};
 	siphoner = {frame:'FRAME_DRONE', mount: 'MOUNT_GAS_SIPHON_I'};
+	surveyor = {frame:'FRAME_DRONE', mount: 'MOUNT_SURVEYOR_I'};
 	lightFreighter = {frame:'FRAME_LIGHT_FREIGHTER', mount: ''};
-	    
-	getShipTypeToBuy(shipyard: Shipyard): ShipyardShip | null {
-		const idealFleet: ShipConfig[] = [];
-		idealFleet.push(this.frigate);
-		idealFleet.push(this.probe);
-		idealFleet.push(this.siphoner);
-		idealFleet.push(this.lightFreighter);
-		idealFleet.push(this.lightFreighter);
-		idealFleet.push(this.lightFreighter);
-		idealFleet.push(this.lightFreighter);
-		idealFleet.push(this.miner);
-		idealFleet.push(this.lightFreighter);
-		idealFleet.push(this.miner);
-		idealFleet.push(this.lightFreighter);
-		idealFleet.push(this.lightFreighter);
-		idealFleet.push(this.lightFreighter);
-		idealFleet.push(this.lightFreighter);
-		idealFleet.push(this.lightFreighter);
-		idealFleet.push(this.lightFreighter);
-		idealFleet.push(this.lightFreighter);
-
+	nextShipTypeToBuy: ShipConfig | null | undefined = undefined;
+	
+	getShipTypeToBuy(): ShipConfig | null {
+		const idealFleet: ShipConfig[] = [
+			this.frigate,
+			this.probe,
+			this.siphoner,
+			this.lightFreighter,
+			this.lightFreighter,
+			this.lightFreighter,
+			this.miner,
+			this.surveyor,
+			this.lightFreighter,
+			this.lightFreighter,
+			this.lightFreighter,
+			this.miner,
+			this.surveyor,
+			this.lightFreighter,
+			this.lightFreighter,
+			this.lightFreighter,
+			this.miner,
+			this.surveyor,
+			this.lightFreighter,
+			this.lightFreighter,
+			this.lightFreighter,
+			this.miner,
+			this.surveyor,
+			this.lightFreighter,
+			this.lightFreighter,
+			this.lightFreighter,
+			this.miner,
+			this.surveyor,
+			this.surveyor,
+			//this.lightFreighter,
+			//this.lightFreighter,
+			//this.lightFreighter,
+			//this.miner,
+			//this.surveyor,
+		];
 		for (let bot of this.shipBots) {
 			let index = 0;
 			for (let shipType of idealFleet) {
@@ -590,15 +643,10 @@ export class AutomationService {
 				index++;
 			}
 		}
-		if (idealFleet.length > 0) {
-			for (const ship of shipyard.ships) {
-				if ((idealFleet[0].frame === ship.frame.symbol) && 
-				     (idealFleet[0].mount === '' || Ship.containsMount(ship, idealFleet[0].mount))) {
-					return ship;
-				}
-			}
+		if (idealFleet.length == 0) {
+			return null;
 		}
-		return null;
+		return idealFleet[0];
 	}
 	
 	buyShips(waypoint: WaypointBase) {
@@ -611,8 +659,10 @@ export class AutomationService {
 			this.getShipyard(waypoint);
 			return;
 		}
-		const shipTypeToBuy = this.getShipTypeToBuy(shipyard);
-		if (!shipTypeToBuy) {
+		if (this.nextShipTypeToBuy == undefined) {
+			this.nextShipTypeToBuy = this.getShipTypeToBuy();
+		}
+		if (this.nextShipTypeToBuy == null) {
 			return
 		}
 		// As we get more ship, we need to keep more free capital in order to keep our trade network going
@@ -620,18 +670,24 @@ export class AutomationService {
 		const credits = (this.agent?.credits || 0) - minCreditsToKeep;
 		if (this.agent && (credits > 0)) {
 			for (let ship of shipyard.ships) {
-				if (ship.type === shipTypeToBuy.type &&
-				    ship.name === shipTypeToBuy.name) {
+				if ((this.nextShipTypeToBuy.frame === ship.frame.symbol) && 
+				     (this.nextShipTypeToBuy.mount === '' || 
+				      Ship.containsMount(ship, this.nextShipTypeToBuy.mount))) {
 					if (ship.purchasePrice < credits) {
-						const step = new ExecutionStep(null, `Buying ship ${shipTypeToBuy.name}`, 'bShip');
-						this.fleetService.purchaseShip(shipTypeToBuy.type, waypoint.symbol)
+						const step = new ExecutionStep(null, `Buying ship ${ship.name} (${ship.type})`, 'bShip');
+						this.fleetService.purchaseShip(ship.type, waypoint.symbol)
 						                 .subscribe((response) => {
 							this.completeStep(step);
 							this.refreshShips = 'All';
 							this.refreshAgent = true;
+							this.nextShipTypeToBuy = undefined; // undef indicates we need to lookup the next ship
 						}, (error) => {
 							this.onError(error, step);
+							this.nextShipTypeToBuy = undefined; // undef indicates we need to lookup the next ship
 						});
+						// Set nextShipTypeToBuy to null to indicate we aren't buying anything (ever!).
+						// This will be reset once the response from the current purchase ship request comes back
+						this.nextShipTypeToBuy = null; 
 						throw step;
 					}
 					break;

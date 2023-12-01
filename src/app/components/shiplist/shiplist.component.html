@@ -36,7 +36,7 @@
 							<div cdkDrag [cdkDragData]="cargoItem" class="cargoItem"
 								*ngFor="let cargoItem of ship!.cargo.inventory"
 								title="{{cargoItem.description}}">
-								{{cargoItem.name }} x{{cargoItem.units}}
+								{{cargoItem.symbol}} x{{cargoItem.units}}
 								<button *ngIf="showMount === 'true' && cargoItem.symbol.startsWith('MOUNT_') && (ship.frame.mountingPoints > ship.mounts.length)"
 								        (click)="onInstallMount(ship, cargoItem)">Install</button>
 							</div>

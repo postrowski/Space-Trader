@@ -38,3 +38,10 @@
     <app-mine></app-mine>
     <button (click)="modalService.close();">Leave</button>
 </app-modal>
+
+<app-modal id="modal-transaction">
+    <app-transactions></app-transactions>
+    <button (click)="modalService.close();">Leave</button>
+</app-modal>
+
+<button (click)="modalService.open('modal-transaction', null)">Transactions</button>

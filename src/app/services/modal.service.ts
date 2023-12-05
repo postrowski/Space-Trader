@@ -32,6 +32,10 @@ export class ModalService {
         this.modals = this.modals.filter(x => x === modal);
     }
 
+	setWaypoint(waypoint: WaypointBase | null) {
+		this.waypointSubject.next(waypoint);
+	}
+	
     open(id: string, waypoint: WaypointBase | null) {
 		this.waypointSubject.next(waypoint);
         // open modal specified by id

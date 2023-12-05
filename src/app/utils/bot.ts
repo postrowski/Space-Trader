@@ -163,8 +163,10 @@ export class Bot {
 								// make sure we are actually getting closer to our destination:
 								const newDist = LocXY.getDistance(fuelStationNearestToDest, waypoint);
 								if (newDist < dist) {
-									this.navigateTo(fuelStationNearestToDest, flightMode,
-									                `Trying to get to ${waypoint.symbol} (dist: ${dist}) via ${fuelStationNearestToDest.symbol} (dist: ${newDist})`);
+									const message = `Trying to get to ${waypoint.symbol} (dist: ${dist}) via ${fuelStationNearestToDest.symbol} (dist: ${newDist})`;
+									console.log(this.ship.symbol + ': ' + message);
+									this.addMessage(message);
+									this.navigateTo(fuelStationNearestToDest, flightMode, message);
 								}
 							}
 						}
@@ -227,13 +229,22 @@ export class Bot {
 		const currentPercent = 100 * this.ship.fuel.current / this.ship.fuel.capacity;
 		if (currentPercent < minPercent) {
 			// make sure our current location trades in fuel
-			if (!this.marketService.getItemAtMarket(this.ship.nav.waypointSymbol, 'FUEL')) {
+			const item = this.marketService.getItemAtMarket(this.ship.nav.waypointSymbol, 'FUEL');
+			if (!item) {
 				return;
 			}
 			this.dock();
 			this.currentStep = new ExecutionStep(this, `refueling`, 'refuel');
-			const units = (this.ship.fuel.capacity - this.ship.fuel.current);
+			let units = (this.ship.fuel.capacity - this.ship.fuel.current);
 			const fromCargo = this.ship.cargo.inventory.some(inv => inv.symbol=='FUEL' && inv.units >= units);
+			if (this.automationService.agent && !fromCargo && 
+			    (this.automationService.agent.credits < item.purchasePrice * units)) {
+				// we don't have enough money to buy this much
+				units = Math.floor(this.automationService.agent.credits / item.purchasePrice);
+				if (units < 1) {
+					return;
+				}
+			}
 			this.marketService.refuelShip(this.ship.symbol, units, fromCargo)
 			                  .subscribe((response)=>{
 				this.completeStep();
@@ -639,12 +650,14 @@ export class Bot {
 				this.supplyConstructionSite(inv.symbol, units);
 			} else if (!onlyIfFull || this.ship.cargo.capacity == this.ship.cargo.units || inv.units >= unitsRequired) {
 				// We have a full cargo load, or all the parts we need, go to that delivery location
-				const systemSymbol = GalaxyService.getSystemSymbolFromWaypointSymbol(destinationSymbol!);
-				const system = this.automationService.systemsBySymbol.get(systemSymbol);
-				if (system) {
-					const waypoint = system?.waypoints?.find((waypoint) => waypoint.symbol === destinationSymbol) || null;
-					if (waypoint) {
-						locations.push({waypoint, inv, destinationType});
+				if (destinationSymbol) {
+					const systemSymbol = GalaxyService.getSystemSymbolFromWaypointSymbol(destinationSymbol!);
+					const system = this.automationService.systemsBySymbol.get(systemSymbol);
+					if (system) {
+						const waypoint = system?.waypoints?.find((waypoint) => waypoint.symbol === destinationSymbol) || null;
+						if (waypoint) {
+							locations.push({waypoint, inv, destinationType});
+						}
 					}
 				}
 			}
@@ -709,6 +722,7 @@ export class Bot {
 			this.fleetService.transferCargo(this.ship.symbol, otherBot.ship.symbol, inv.symbol, Math.min(freeSpace, inv.units))
 				             .subscribe((response) => {
 					this.completeStep();
+					this.marketService.recordTransfer(this.ship, otherBot.ship, inv.symbol, inv.units);
 				}, (error) => {
 					this.onError(error);
 				});

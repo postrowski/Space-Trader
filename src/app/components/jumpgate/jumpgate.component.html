@@ -2,10 +2,19 @@
 <div class="text-container">
 <div>
 <h2>Exports</h2>
-<table *ngIf="jumpgate != null">
-	<tr *ngFor="let waypointSymbol of jumpgate.connections">
-		<td>{{waypointSymbol}}</td>
-		<td><button (click)="onJump(waypointSymbol)">Jump</button></td>
+<table>
+	<tr>
+		<td>
+			<table *ngIf="jumpgate != null">
+				<tr *ngFor="let waypointSymbol of jumpgate.connections">
+					<td (click)="onWaypointClicked(waypointSymbol)">{{waypointSymbol}}</td>
+					<td><button (click)="onJump(waypointSymbol)">Jump</button></td>
+				</tr>
+			</table>
+		</td>
+		<td>
+			<app-galaxy-map></app-galaxy-map>
+		</td>
 	</tr>
 </table>
 </div>

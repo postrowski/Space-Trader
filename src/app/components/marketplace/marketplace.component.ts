@@ -429,8 +429,18 @@ export class MarketplaceComponent implements OnInit{
 	}
 	onMarketClick(marketSymbol: string) {
 		this.waypoint = this.galaxyService.getWaypointByWaypointSymbol(marketSymbol);
+		this.modalService.setWaypoint(this.waypoint);
+		const item = this.selectedTradeItem;
 		this.loadShips();
 		this.loadMarket();
+		if (item) {
+			for (const good of this.goods) {
+				if (good.symbol == item.symbol) {
+					this.selectTradeItem(good);
+					break;
+				}
+			}
+		}
 	}
 }
 export class TypedMarketItem {

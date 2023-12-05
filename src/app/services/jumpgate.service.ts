@@ -175,7 +175,7 @@ export class JumpgateService {
 			this.jumpgateByWaypointSymbol.set(systemWaypointSymbol, jumpgate);
 			for (let jumpgateSymbol of jumpgate.connections) {
 				const system        = new System(0, 0);
-				system.symbol       = jumpgateSymbol;
+				system.symbol       = GalaxyService.getSystemSymbolFromWaypointSymbol(jumpgateSymbol);
 				system.sectorSymbol = '?';
 				system.type         = '?';
 				system.waypoints    = null;

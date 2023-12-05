@@ -5,6 +5,7 @@ import { Manager } from "./manager";
 import { LocXY } from "src/models/LocXY";
 import { Survey } from "src/models/Survey";
 import { ExplorationService } from "../services/exploration.service";
+import { TemplatePortalDirective } from "@angular/cdk/portal";
 
 export class PairManager extends Manager {
 
@@ -162,9 +163,25 @@ export class PairManager extends Manager {
 		if (miningDestinationsWithMiners && miningDestinationsWithMiners.length > 0) {
 			this.miningWaypoint = miningDestinationsWithMiners[0];
 		} else {
-			// Go to the nearest mine
-			const waypoints = ExplorationService.sortWaypointsByDistanceFrom(miningDestinations, waypoint);
-			this.miningWaypoint = waypoints[0];
+			// Go to the mine closest to a market, that is unoccupied:
+			const marketDestinations = system.waypoints?.filter((way) => WaypointBase.hasMarketplace(way)) || [];
+	
+			const allShips = this.fleetService.getShips();
+			const shipLocs = new Set(allShips.map(s=> s.nav.waypointSymbol));
+			let targetAsteroid = null;
+			let targetDist = Infinity;
+			for (const market of marketDestinations) {
+				for (const asteroid of miningDestinations) {
+					if (!shipLocs.has(asteroid.symbol)) {
+						const dist = LocXY.getDistance(market, asteroid);
+						if (dist < targetDist) {
+							targetDist = dist;
+							targetAsteroid = asteroid;
+						}
+					}
+				}
+			}
+			this.miningWaypoint = targetAsteroid;
 		}
 	}
 	scoreWaypoint(waypoint: WaypointBase): number {

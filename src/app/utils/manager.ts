@@ -319,7 +319,7 @@ export abstract class Manager {
 		                    .filter((inv) => bot.currentTradeRoute?.sellItems.some(i => i.symbol === inv.symbol)
 		                                  || bot.currentTradeRoute?.deliverItems.some(i => i.symbol === inv.symbol)
 		                                  || bot.currentTradeRoute?.buyItem?.symbol === inv.symbol);
-		const invItem = (invItems && invItems.length > 1) ? invItems[0] : null;
+		const invItem = (invItems && invItems.length > 0) ? invItems[0] : null;
 		const itemCount = invItem?.units || 0;
 		
 		if (bot.currentTradeRoute.state == 'goBuy') {

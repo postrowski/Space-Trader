@@ -82,8 +82,8 @@ export class GalaxyComponent {
 		this.findSystemsNearLocation(loc, distance)
 			.then((result: System[]) => {
 				console.log(`found ${result.length} systems within ${distance}`)
-				if ((result.length < this.nearbySystemCount) &&
-				    (result.length > previousSearchCount)) {
+				if ((result.length < this.nearbySystemCount) && distance < 100_000 &&
+				    (result.length > previousSearchCount || result.length < 2)) {
 					// search farther out, unless we didnt increase our system count
 					// when we increased the search last time.
 					this.findNearbySystems(loc, distance * 3, result.length);

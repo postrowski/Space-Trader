@@ -1,0 +1,34 @@
+<p>transactions</p>
+Ship:
+<select [(ngModel)]="selectedShipSymbol" (ngModelChange)="onSelectedShipChanged()">
+	<option value="null">All</option>option>
+	<option *ngFor="let ship of ships" [ngValue]="ship.symbol">
+		{{ ship.symbol}}
+	</option>
+</select>
+
+transactions for {{selectedShipSymbol}}:
+<table *ngIf="selectedShipSymbol">
+	<tr>
+		<td>Timestamp</td>
+		<td>Ship Symbol</td>
+		<td>Waypoint Symbol</td>
+		<td>Type</td>
+		<td>Units</td>
+		<td>Trade Symbol</td>
+		<td>Price Per Unit</td>
+		<td>Total Price</td>
+		<td>Total Credits</td>
+	</tr>
+	<tr *ngFor="let tr of transactionsPerShip">
+		<td>{{formatDate(tr.timestamp)}}</td>
+		<td>{{tr.shipSymbol}}</td>
+		<td>{{tr.waypointSymbol}}</td>
+		<td>{{tr.type}}</td>
+		<td>{{tr.units}}</td>
+		<td>{{tr.tradeSymbol}}</td>
+		<td class="numeric">{{(tr.type == 'SELL' ? 1: -1) * tr.pricePerUnit | currency : 'USD' : 'symbol' : '1.0-0'}}</td>
+		<td class="numeric">{{(tr.type == 'SELL' ? 1: -1) * tr.totalPrice | currency : 'USD' : 'symbol' : '1.0-0'}}</td>
+		<td class="numeric">{{tr.totalCredits | currency : 'USD' : 'symbol' : '1.0-0'}}</td>
+	</tr>
+</table>

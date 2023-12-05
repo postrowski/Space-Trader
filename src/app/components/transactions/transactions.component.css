@@ -1,0 +1,11 @@
+td {
+	padding-right:10px;
+}
+
+td.numeric {
+	text-align: right;
+}
+
+td.centered {
+	text-align: center;
+}

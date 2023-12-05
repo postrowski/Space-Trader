@@ -81,7 +81,36 @@ export class MarketService {
 		this.addToMarketTransactions(market.transactions);
 		return marketItems;
 	}
-	
+	recordTransfer(fromShip: Ship, toShip: Ship, itemSymbol: string, units: number) {
+		let averagePrice = this.getAverageCost(fromShip.nav.waypointSymbol, itemSymbol, 'SELL');
+		const frameFrom = fromShip.frame.name.toLowerCase();
+		const frameTo = toShip.frame.name.toLowerCase();
+		if (frameTo.includes('freighter') && frameFrom.includes('drone')) {
+			// When transfering from a mining drone to a freighter, split the sell price
+			// so each ship gets partial credit for the proceeds.
+			averagePrice = averagePrice / 2;
+		}
+
+		const marketTransaction1 = new MarketTransaction();
+		marketTransaction1.shipSymbol = toShip.symbol;
+		marketTransaction1.waypointSymbol = fromShip.symbol;
+		marketTransaction1.tradeSymbol = itemSymbol;
+		marketTransaction1.pricePerUnit = averagePrice;
+		marketTransaction1.units = units;
+		marketTransaction1.timestamp = new Date().toISOString();
+		marketTransaction1.totalPrice = averagePrice * units;
+		marketTransaction1.type = 'SELL';
+		const marketTransaction2 = new MarketTransaction();
+		marketTransaction2.shipSymbol = fromShip.symbol;
+		marketTransaction2.waypointSymbol = toShip.symbol;
+		marketTransaction2.tradeSymbol = itemSymbol;
+		marketTransaction2.pricePerUnit = averagePrice;
+		marketTransaction2.units = units;
+		marketTransaction2.timestamp = new Date().toISOString();
+		marketTransaction2.totalPrice = averagePrice * units;
+		marketTransaction2.type = 'PURCHASE';
+		this.addToMarketTransactions([marketTransaction1, marketTransaction2]);
+	}
 	private addToMarketTransactions(marketTransactionsArray: MarketTransaction[]) {
 		for (const marketTransaction of marketTransactionsArray) {
 			let marketTransactionsByTradeSymbol = this.marketTransactionsByTradeSymbolByWaypointSymbol.get(marketTransaction.waypointSymbol);
@@ -322,16 +351,23 @@ export class MarketService {
 		return total/count;
 	}
 	getAverageFuelCost(systemSymbol: string) {
+		return this.getAverageCost(systemSymbol, 'FUEL', 'PURCHASE');
+	}
+	getAverageCost(systemSymbol: string, itemSymbol: string, actionType: string) {
 		systemSymbol = GalaxyService.getSystemSymbolFromWaypointSymbol(systemSymbol);
-		const fuelPricesByWaypointSymbol = this.getPricesForItemInSystemByWaypointSymbol(systemSymbol, 'FUEL');
+		const pricesByWaypointSymbol = this.getPricesForItemInSystemByWaypointSymbol(systemSymbol, itemSymbol);
 		let cost = 0;
-		for (let fuelItem of fuelPricesByWaypointSymbol.values() || []) {
-			cost += fuelItem.purchasePrice;
+		for (let item of pricesByWaypointSymbol.values() || []) {
+			if (actionType == 'SELL') {
+				cost += item.sellPrice;
+			} else {
+				cost += item.purchasePrice;
+			}
 		}
 		if (cost == 0) {
 			return 250;
 		}
-		return Math.ceil(cost / fuelPricesByWaypointSymbol.size);
+		return Math.ceil(cost / pricesByWaypointSymbol.size);
 	}
 	
 	findCheapestMarketItemForSaleInSystem(fromWaypoint: WaypointBase, itemSymbol: string, unitsToBuy: number, excludeImportMarkets: boolean): UiMarketItem | null {

@@ -1,6 +1,6 @@
 	<div>
 		Credits: {{account?.credits | currency : 'USD' : 'symbol' : '1.0-0'}}<br/>
-		Ships At Waypoint:
+		Ships At {{waypoint?.symbol}}:
 		<div cdkDropListGroup>
 			<table *ngFor="let ship of shipsAtWaypoint"
 				[ngClass]="{ 'selected-ship': ship == selectedShip }"
@@ -19,8 +19,14 @@
 								[startTimeStr]="ship.nav.route.departureTime"
 								[endTimeStr]="ship.nav.route.arrival"></app-countdown>
 						</div>
-						<button *ngIf="ship.nav.status === 'DOCKED'" (click)="onOrbitShip(ship)">Orbit</button>
-						<button *ngIf="ship.nav.status === 'IN_ORBIT'" (click)="onDockShip(ship)">Dock</button>
+						<span *ngIf="ship.nav.status === 'IN_ORBIT'">
+							In Orbit<br/>
+							<button (click)="onDockShip(ship)">Dock</button>
+						</span>
+						<span *ngIf="ship.nav.status === 'DOCKED'">
+							<button (click)="onOrbitShip(ship)">Orbit</button><br/>
+							Docked
+						</span>
 					</td>
 				</tr>
 				<tr>

@@ -157,7 +157,7 @@ export class AutomationService {
 		while (error.error) {
 			error = error.error;
 		}
-		const message = error.message.toLowerCase();
+		const message = error.message?.toLowerCase() || 'null';
 		this.addMessage(null, "Error condition! " + message);
 		if (message.includes("Token version does not match the server")) {
 			if (this.serverResetHappening) {
@@ -406,6 +406,7 @@ export class AutomationService {
 				manager.step(this.systemsBySymbol, this.shipOperationBySymbol, this.activeShips, credits);
 			}
 			executionStep.manager = '';
+			this.galaxyService.completeIncompleteGalaxies();
 			this.galaxyService.getNextPageOfWaypoints();
 		} catch (error) {
 			if (error instanceof ExecutionStep) {
@@ -420,7 +421,7 @@ export class AutomationService {
 					setTimeout(function() {
 						if (shipOperationBySymbol.get(shipSymbol) == step) {
 							shipOperationBySymbol.delete(shipSymbol);
-							const message = `Command '${step}' still not cleared after 10 seconds.`;
+							const message = `Command '${step}' on ship ${shipSymbol} still not cleared after 10 seconds.`;
 						  	me.addMessage(step.bot?.ship || null, message);
 						  	console.error(message);
 						}
@@ -599,12 +600,15 @@ export class AutomationService {
 		const idealFleet: ShipConfig[] = [
 			this.frigate,
 			this.probe,
+			this.lightFreighter,
 			this.siphoner,
+			this.lightFreighter,
 			this.lightFreighter,
 			this.lightFreighter,
 			this.lightFreighter,
 			this.miner,
 			this.surveyor,
+			this.lightFreighter,
 			this.lightFreighter,
 			this.lightFreighter,
 			this.lightFreighter,
@@ -666,14 +670,15 @@ export class AutomationService {
 			return
 		}
 		// As we get more ship, we need to keep more free capital in order to keep our trade network going
-		const minCreditsToKeep = (this.tradeManager?.shipBots.length || 1) * 50_000 + 50_000;
+		const minCreditsToKeep = (this.tradeManager?.shipBots.length || 1) * 25_000 + 25_000;
 		const credits = (this.agent?.credits || 0) - minCreditsToKeep;
 		if (this.agent && (credits > 0)) {
 			for (let ship of shipyard.ships) {
 				if ((this.nextShipTypeToBuy.frame === ship.frame.symbol) && 
 				     (this.nextShipTypeToBuy.mount === '' || 
 				      Ship.containsMount(ship, this.nextShipTypeToBuy.mount))) {
-					if (ship.purchasePrice < credits) {
+					if (ship.purchasePrice < credits && !AutomationService.shipPurchaseInProgress) {
+						AutomationService.shipPurchaseInProgress = true;
 						const step = new ExecutionStep(null, `Buying ship ${ship.name} (${ship.type})`, 'bShip');
 						this.fleetService.purchaseShip(ship.type, waypoint.symbol)
 						                 .subscribe((response) => {
@@ -681,9 +686,11 @@ export class AutomationService {
 							this.refreshShips = 'All';
 							this.refreshAgent = true;
 							this.nextShipTypeToBuy = undefined; // undef indicates we need to lookup the next ship
+							AutomationService.shipPurchaseInProgress = false;
 						}, (error) => {
 							this.onError(error, step);
 							this.nextShipTypeToBuy = undefined; // undef indicates we need to lookup the next ship
+							AutomationService.shipPurchaseInProgress = false;
 						});
 						// Set nextShipTypeToBuy to null to indicate we aren't buying anything (ever!).
 						// This will be reset once the response from the current purchase ship request comes back
@@ -695,6 +702,7 @@ export class AutomationService {
 			}
 		}
 	}
+	static shipPurchaseInProgress = false;
 	
 	waypointsLoading = new Set<string>();
 	loadWaypoints(system: System) {

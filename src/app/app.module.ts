@@ -36,6 +36,7 @@ import { DiagnosticsComponent } from './components/diagnostics/diagnostics.compo
 import { ShiplistComponent } from './components/shiplist/shiplist.component';
 import { LeaderboardComponent } from './components/leaderboard/leaderboard.component';
 import { SortPipe } from './pipes/AgentSort';
+import { TransactionsComponent } from './components/transactions/transactions.component';
 @NgModule({
 	declarations: [
 		AppComponent,
@@ -67,6 +68,7 @@ import { SortPipe } from './pipes/AgentSort';
   DiagnosticsComponent,
   ShiplistComponent,
   LeaderboardComponent,
+  TransactionsComponent,
 	],
 	imports: [
 		BrowserAnimationsModule,

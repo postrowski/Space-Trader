@@ -162,6 +162,10 @@ export class DBService {
 	createSystem(system: System): Promise<string> {
 		return this.systems.put(system, system.symbol);
 	}
+	deleteSystem(system: System) {
+		this.systems.delete(system.symbol);
+	}
+	
 	createWaypoint(waypoint: Waypoint) {
 		this.waypoints.put(waypoint, waypoint.symbol)
 			.then(() => {
@@ -213,6 +217,9 @@ export class DBService {
 
 	getAllWaypoints(): Promise<Waypoint[]> {
 		return this.waypoints.toArray();
+	}
+	getAllMarketTransactions(): Promise<MarketTransaction[]> {
+		return this.marketTransactions.toArray();
 	}
 
 	addMarketTransactions(marketTransactions: MarketTransaction[]) {

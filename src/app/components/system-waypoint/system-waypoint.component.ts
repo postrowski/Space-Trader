@@ -66,24 +66,24 @@ export class SystemWaypointComponent {
 	isFactionHQ(){
 		return this.accountService.isFactionHQ(this.waypoint.symbol);
 	}
-	getShipAtWaypoint() : Ship | null {
+	getShipsAtWaypoint() : Ship[] {
+		const ships = [];
 		for (const ship of this.fleetService.getShips()) {
 			if ((ship.nav.status !== 'IN_TRANSIT') && 
 			   (ship.nav.waypointSymbol == this.waypoint.symbol)) {
-				return ship;
+				ships.push(ship);
 			}
 		}
-		return null;
+		return ships;
 	}
 	onSupplyConstructionMaterial(material: ConstructionMaterial) {
-		const ship = this.getShipAtWaypoint();
-		if (ship) {
+		for (const ship of this.getShipsAtWaypoint()) {
 			for (const inv of ship.cargo.inventory) {
 				if (inv.symbol == material.tradeSymbol) {
 					const units = Math.min(inv.units, (material.required - material.fulfilled));
 					this.constructionService.supplyConstructionSite(this.waypoint.symbol, ship.symbol,
 					                                                inv.symbol, units)
-									  .subscribe((response) => {
+									        .subscribe((response) => {
 						this.constructionSite = response.data.construction;
 						ship.cargo = response.data.cargo;
 					});
@@ -100,14 +100,14 @@ export class SystemWaypointComponent {
 		});
 	}
 	onCreateChart() {
-		const ship = this.getShipAtWaypoint();
-		if (ship) {
+		for (const ship of this.getShipsAtWaypoint()) {
 			this.fleetService.createChart(ship.symbol)
 							 .subscribe((response) => {
 				if (response.data.waypoint.symbol == this.waypoint.symbol) {
 					this.waypoint.traits = response.data.waypoint.traits;
 				}
 			});
+			return;
 		}		
 	}
 }

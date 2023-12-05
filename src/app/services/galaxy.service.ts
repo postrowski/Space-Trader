@@ -38,6 +38,14 @@ export class GalaxyService {
 	        liveQuery(() => this.dbService.systems.toArray()).subscribe((response) => {
 	            this.allSystems = response;
 	            this.setHomeSystem();
+	            for (const system of this.allSystems) {
+					const syms = system.symbol.split('-');
+					if (syms.length == 3) {
+						this.dbService.deleteSystem(system);
+						system.symbol = syms[0] + '-' + syms[1];
+						this.dbService.createSystem(system);
+					}
+				}
 	        });
 	    });
 		    
@@ -73,10 +81,16 @@ export class GalaxyService {
 	addSystem(newSystem: System) {
 		for (let system of this.allSystems) {
 			if (system.symbol === newSystem.symbol) {
+				// Update the current system from the new system
 				if (newSystem.waypoints && newSystem.waypoints.length) {
 					system.waypoints = newSystem.waypoints;
 				}
-				// TODO: Update the current system from the new system?
+				system.x = newSystem.x;
+				system.y = newSystem.y;
+				system.type = newSystem.type;
+				system.factions = newSystem.factions;
+				system.sectorSymbol = newSystem.sectorSymbol;
+				this.addNewSystemDB(system);
 				return;
 			}
 		}
@@ -127,16 +141,15 @@ export class GalaxyService {
 	}
 	
 	setActiveSystemBySymbol(systemSymbol: string) {
+		systemSymbol = GalaxyService.getSystemSymbolFromWaypointSymbol(systemSymbol);
 		const existingSystem = this.getSystemBySymbol(systemSymbol);
 		if (existingSystem) {
 			this.setActiveSystem(existingSystem);
 			return;
 		}
-		this.getSystem(systemSymbol)
-			.subscribe((response) => {
-				this.addSystem(response);
-				this.setActiveSystem(response);
-			});
+		this.getSystem(systemSymbol).subscribe((response) => {
+			this.setActiveSystem(response);
+		});
 	}
 	public static getSystemSymbolFromWaypointSymbol(systemWaypointSymbol: string) {
 		const elements = systemWaypointSymbol.split('-');
@@ -147,7 +160,6 @@ export class GalaxyService {
 		const system = this.getActiveSystem();
 		if (system == null) {
 			this.getSystem(systemSymbol).subscribe((response) => {
-				this.addSystem(response);
 				this.setActiveSystem(response);
 				this.setActiveSystemWaypointBySymbol(systemWaypointSymbol);
 			});
@@ -202,6 +214,16 @@ export class GalaxyService {
 		}
 	}
 	
+	completeIncompleteGalaxies(): boolean {
+        for (const system of this.allSystems) {
+			if (system.type == '?' || (system.x === 0 && system.y === 0)) {
+				this.getSystem(system.symbol).subscribe(()=>{});
+				return true;
+			}
+		}
+		return false;
+	}
+	
 	loadMoreGalaxies(): boolean {
 		let galaxyCount = this.allSystems.length;
 		if (galaxyCount < this.totalSystemsCount || this.totalSystemsCount == 0) {
@@ -213,7 +235,9 @@ export class GalaxyService {
 	}
 	totalSystemsCount = 0;
 	updateGalaxyPage(page: number) {
-		this.getSystemsPage(page)
+		const headers = this.accountService.getHeader();
+		const params = {limit: this.pageSize, page: page};
+		this.http.get<{data: System[], meta: Meta}>(`${this.apiUrlSystems}`, {headers, params})
 			.subscribe((response) => {
 				for (let system of response.data) {
 					this.addSystem(system);
@@ -232,15 +256,16 @@ export class GalaxyService {
 		}
 	}
 		
-	getSystemsPage(page: number) : Observable<{data: System[], meta: Meta}> {
-		const headers = this.accountService.getHeader();
-		const params = {limit: this.pageSize, page: page};
-		return this.http.get<{data: System[], meta: Meta}>(`${this.apiUrlSystems}`, {headers, params})
-	}
 	getSystem(systemSymbol:string) : Observable<System> {
 		const headers = this.accountService.getHeader();
-		return this.http.get<System>(`${this.apiUrlSystems}/${systemSymbol}`, {headers})
-		      .pipe(map((response: any) => response.data as System)); // Extract 'data' as System
+		const observable = this.http.get<System>(`${this.apiUrlSystems}/${systemSymbol}`, {headers})
+       			// Extract 'data' as System
+			 	.pipe(map((response: any) => response.data as System))
+	      		.pipe(shareReplay(1)); // Use the shareReplay operator so our service can subscribe, and so can the caller
+		observable.subscribe((response) => {
+				this.addSystem(response);
+			});
+		return observable;
 	}
 	getAllWaypoints(systemSymbol: string): Observable<Waypoint[]> {
 		systemSymbol = GalaxyService.getSystemSymbolFromWaypointSymbol(systemSymbol);

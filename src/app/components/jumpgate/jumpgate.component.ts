@@ -62,6 +62,9 @@ export class JumpgateComponent {
 			}
 		})
 	}
+	onWaypointClicked(waypointSymbol: string) {
+		this.galaxyService.setActiveSystemBySymbol(waypointSymbol);
+	}
 	
 	onJump(targetWaypoint: string) {
 		if (this.selectedShip) {

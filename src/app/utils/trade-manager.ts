@@ -3,10 +3,9 @@ import { Ship } from "src/models/Ship";
 import { WaypointBase } from "src/models/WaypointBase";
 import { System } from "src/models/System";
 import { Manager } from "./manager";
-import { SellPlan, UiMarketItem } from "../services/market.service";
+import { UiMarketItem } from "../services/market.service";
 import { ExplorationService } from "../services/exploration.service";
 import { LocXY } from "src/models/LocXY";
-import { Survey } from "src/models/Survey";
 
 export class TradeManager extends Manager {
 	
@@ -18,16 +17,16 @@ export class TradeManager extends Manager {
 		if (super.addBot(bot)) {
 			if (bot.role == Role.Hauler) {
 				this.haulerBots.push(bot);
-				// First bot goes to construction
-				if (this.haulerBots.length == 1) {
+				// Second bot goes to construction
+				if (this.haulerBots.length == 3) {
 					this.constructionBots.push(bot);
 				}
-				// Second bot goes to contracts
-				if (this.haulerBots.length == 2) {
+				// third bot goes to contracts
+				if (this.haulerBots.length == 4) {
 					this.contractBot = bot;
 				}
 				// all other bots go to construction
-				if (this.haulerBots.length >= 3) {
+				if (this.haulerBots.length > 6) {
 					this.constructionBots.push(bot);
 				}
 			}
@@ -151,8 +150,8 @@ export class TradeManager extends Manager {
 		}
 		let itemFor = '';
 		let itemsToBuy: {symbol: string, units: number, itemFor: string, deliverTo: string}[] = [];
-		let contractAllowed = (bot == this.contractBot) && (credits > 100_000);
-		let constructionAllowed = this.constructionBots.includes(bot) && (credits > 100_000);
+		let contractAllowed = (bot == this.contractBot) && (credits > 200_000);
+		let constructionAllowed = this.constructionBots.includes(bot) && (credits > 300_000);
 		if (this.constructionSite && constructionAllowed) {
 			for (const material of this.constructionSite.materials) {
 				const units = material.required - material.fulfilled;

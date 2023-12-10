@@ -1,33 +1,5 @@
 <h2>Messages</h2>
-<table>
-	<tr>
-		<td>
-			<label>
-				<input type="radio" [(ngModel)]="displayMode" value="All" (change)="onDisplayModeChange()"> All
-			</label>
-			<br/>
-			<label>
-				<input type="radio" [(ngModel)]="displayMode" value="Single" (change)="onDisplayModeChange()"> Single
-			</label>
-			<br/>
-			<label>
-				<input type="radio" [(ngModel)]="displayMode" value="Multiple" (change)="onDisplayModeChange()"> Multiple
-			</label>
-		</td>
-		<ng-container *ngIf="displayMode !== 'All'">
-			<td *ngFor="let show of showShip; let index=index">
-				<ng-container *ngIf="displayMode == 'Single'">
-		  			<input [attr.id]="'radio'+index" type="radio" [(ngModel)]="singleValue" value="{{show.shipSymbol}}">
-					<label [attr.for]="'radio'+index"> {{show.shipSymbol ? show.shipSymbol : 'None'}}</label>
-				</ng-container>
-				<ng-container *ngIf="displayMode == 'Multiple'">
-		  			<input [attr.id]="'check'+index" type="checkbox" [(ngModel)]="show.value">
-					<label [attr.for]="'check'+index"> {{show.shipSymbol ? show.shipSymbol : 'None'}}</label>
-				</ng-container>
-			</td>
-		</ng-container>
-	</tr>
-</table>
+<app-ship-selector [shipStates]="showShip"></app-ship-selector>
 <button (click)="onClear()">Clear Messages</button>
 <table>
 	<tr>

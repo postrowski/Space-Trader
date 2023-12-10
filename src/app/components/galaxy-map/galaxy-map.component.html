@@ -149,20 +149,20 @@
 <table>
 <tr>
 <td>Show symbols:<br/>
-<input type="checkbox" [(ngModel)]="showGate"      id="showGate"     ><label for="showGate"     >Jump Gates</label><br/>
-<input type="checkbox" [(ngModel)]="showShipyard"  id="showShipyard" ><label for="showShipyard" >Shipyard</label><br/>
-<input type="checkbox" [(ngModel)]="showMarket"    id="showMarket"   ><label for="showMarket"   >Market</label><br/>
-<input type="checkbox" [(ngModel)]="showAsteroids" id="showAsteroids"><label for="showAsteroids">Asteroids</label><br/>
-<input type="checkbox" [(ngModel)]="showDebris"    id="showDebris"   ><label for="showDebris"   >Debris</label><br/>
+<input type="checkbox" [(ngModel)]="showGate"       ><span (click)="showGate      = !showGate"     >Jump Gates</span><br/>
+<input type="checkbox" [(ngModel)]="showShipyard"   ><span (click)="showShipyard  = !showShipyard" >Shipyard</span><br/>
+<input type="checkbox" [(ngModel)]="showMarket"     ><span (click)="showMarket    = !showMarket"   >Market</span><br/>
+<input type="checkbox" [(ngModel)]="showAsteroids"  ><span (click)="showAsteroids = !showAsteroids">Asteroids</span><br/>
+<input type="checkbox" [(ngModel)]="showDebris"     ><span (click)="showDebris    = !showDebris"   >Debris</span><br/>
 <br/>
-<input type="checkbox" [(ngModel)]="showJumplines" id="showJumplines"><label for="showJumplines">Jumplines</label><br/>
+<input type="checkbox" [(ngModel)]="showJumplines"  ><span (click)="showJumplines = !showJumplines">Jumplines</span><br/>
 </td>
 <td>Filter on:<br/>
-<input type="checkbox" [(ngModel)]="filterGate"      id="filterGate"     ><label for="filterGate"     >Jump Gates</label><br/>
-<input type="checkbox" [(ngModel)]="filterShipyard"  id="filterShipyard" ><label for="filterShipyard" >Shipyard</label><br/>
-<input type="checkbox" [(ngModel)]="filterMarket"    id="filterMarket"   ><label for="filterMarket"   >Market</label><br/>
-<input type="checkbox" [(ngModel)]="filterAsteroids" id="filterAsteroids"><label for="filterAsteroids">Asteroids</label><br/>
-<input type="checkbox" [(ngModel)]="filterDebris"    id="filterDebris"   ><label for="filterDebris"   >Debris</label><br/>
+<input type="checkbox" [(ngModel)]="filterGate"     ><span (click)="filterGate      = !filterGate"     >Jump Gates</span><br/>
+<input type="checkbox" [(ngModel)]="filterShipyard" ><span (click)="filterShipyard  = !filterShipyard" >Shipyard</span><br/>
+<input type="checkbox" [(ngModel)]="filterMarket"   ><span (click)="filterMarket    = !filterMarket"   >Market</span><br/>
+<input type="checkbox" [(ngModel)]="filterAsteroids"><span (click)="filterAsteroids = !filterAsteroids">Asteroids</span><br/>
+<input type="checkbox" [(ngModel)]="filterDebris"   ><span (click)="filterDebris    = !filterDebris"   >Debris</span><br/>
 </td>
 </tr>
 </table>

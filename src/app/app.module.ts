@@ -37,6 +37,7 @@ import { ShiplistComponent } from './components/shiplist/shiplist.component';
 import { LeaderboardComponent } from './components/leaderboard/leaderboard.component';
 import { SortPipe } from './pipes/AgentSort';
 import { TransactionsComponent } from './components/transactions/transactions.component';
+import { ShipSelectorComponent } from './components/ship-selector/ship-selector.component';
 @NgModule({
 	declarations: [
 		AppComponent,
@@ -69,6 +70,7 @@ import { TransactionsComponent } from './components/transactions/transactions.co
   ShiplistComponent,
   LeaderboardComponent,
   TransactionsComponent,
+  ShipSelectorComponent,
 	],
 	imports: [
 		BrowserAnimationsModule,

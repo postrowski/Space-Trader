@@ -18,6 +18,7 @@ export class AutomationComponent {
 		this.automationService.running$.subscribe((running) => {
 			this.running = running;
 		});
+		this.allowShips = this.automationService.automationEnabledShips;
 		this.fleetService.allShips$.subscribe((ships) => {
 			for (const ship of ships) {
 				if (this.allShipSymbols.includes(ship.symbol)) {
@@ -26,6 +27,16 @@ export class AutomationComponent {
 				this.allShipSymbols.push(ship.symbol);
 				this.allowShips.push({shipSymbol: ship.symbol, value: true});
 			}
+			
+			this.allowShips.sort((a, b) => {
+				if (a.shipSymbol.length < b.shipSymbol.length) return -1;
+				if (a.shipSymbol.length > b.shipSymbol.length) return 1;
+				if (a.shipSymbol < b.shipSymbol) return -1;
+				if (a.shipSymbol > b.shipSymbol) return 1;
+				return 0;
+			});
+			this.allowShips = [...this.allowShips];
+			this.automationService.setAutomationEnabledShips(this.allowShips);
 		});
 	}
 	onStart() {
@@ -38,6 +49,6 @@ export class AutomationComponent {
 		this.automationService.stop();
 	}
 	onAllowShipsChanged() {
-		this.automationService.setActiveShips(this.allowShips);
+		this.automationService.setAutomationEnabledShips(this.allowShips);
 	}
 }

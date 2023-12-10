@@ -1,0 +1,14 @@
+<table>
+	<tr *ngFor="let row of shipStateRows; let rIndex = index">
+		<td *ngFor="let ship of row; let index=index" [ngClass]="{ 'check-on': ship.value, 'check-off': !ship.value}">
+			<input type="checkbox" [(ngModel)]="ship.value" (change)="onShipsChanged()">
+			<span (click)="ship.value = !ship.value">{{ship.shipSymbol.toLowerCase().replace('blackrat-', '')}}</span>
+		</td>
+	</tr>
+	<tr>
+		<td colspan="10">
+			<button (click)="onSelectAll()">All</button>
+			<button (click)="onSelectNone()">None</button>
+		</td>
+	</tr>
+</table>

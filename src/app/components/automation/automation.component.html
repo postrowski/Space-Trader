@@ -36,12 +36,5 @@
 			</td>
 		</tr>
 	</table>
-	<table>
-		<tr>
-			<td *ngFor="let allowShip of allowShips; let index=index" class="allow_ship">
-				<input [attr.id]="'ship'+index" type="checkbox" [(ngModel)]="allowShip.value" (change)="onAllowShipsChanged()">
-				<label [attr.for]="'ship'+index"> {{allowShip.shipSymbol.toLowerCase().replace('blackrat-', '')}}</label>
-			</td>
-		</tr>
-	</table>
+	<app-ship-selector [shipStates]="allowShips"></app-ship-selector>
 </div>

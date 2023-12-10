@@ -12,7 +12,6 @@ export class DiagnosticsComponent {
 	allMessages: LogMessage[] = [];
 	allShipSymbols: string[] = [];
 	showShip: { shipSymbol: string, value: boolean }[] = [];
-    displayMode: 'All' | 'Single' | 'Multiple' = 'All';
     singleValue = '';
 
 	constructor(public automationService: AutomationService) {
@@ -30,28 +29,21 @@ export class DiagnosticsComponent {
 					if (a.shipSymbol > b.shipSymbol) return 1;
 					return 0;
 				});
+				this.showShip = [...this.showShip];
 			}
 		});
 	}
-    onDisplayModeChange(): void {
-        console.log('Selected display mode:', this.displayMode);
-    }
     
 	showMessage(message: LogMessage) {
-		if (this.displayMode == 'All') {
-			return true;
-		}
-		if (this.displayMode == 'Multiple') {
-			if (this.showShip.some((ss) => ss.value)) {
-				for (const show of this.showShip) {
-					if (('BLACKRAT-' + show.shipSymbol == message.shipSymbol) || (show.shipSymbol == message.shipSymbol)) {
-						return show.value;
-					}
+		if (this.showShip.some((ss) => ss.value)) {
+			for (const show of this.showShip) {
+				if (('BLACKRAT-' + show.shipSymbol == message.shipSymbol) ||
+				     (show.shipSymbol == message.shipSymbol)) {
+					return show.value;
 				}
 			}
-			return true;
 		}
-		return ('BLACKRAT-' + this.singleValue == message.shipSymbol) || (this.singleValue == message.shipSymbol);
+		return true;
 	}
 	onClear() {
 		this.allMessages.length = 0;

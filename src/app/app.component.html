@@ -3,14 +3,15 @@
 	<tr>
 		<td style="width: 400px">
 			<app-galaxy></app-galaxy>
+			<button (click)="modalService.open('modal-leaderboard', null)">Leaderboard</button>
 			<app-agent></app-agent>
 			<app-contracts></app-contracts>
+			<button (click)="modalService.open('modal-transaction', null)">Transactions</button>
+			<app-diagnostics></app-diagnostics>
 		</td>
 		<td>
 			<app-automation></app-automation>
 			<app-fleet></app-fleet>
-			<app-diagnostics></app-diagnostics>
-			<button (click)="modalService.open('modal-leaderboard', null)">Leaderboard</button>
 		</td>
 	</tr>
 </table>
@@ -43,5 +44,3 @@
     <app-transactions></app-transactions>
     <button (click)="modalService.close();">Leave</button>
 </app-modal>
-
-<button (click)="modalService.open('modal-transaction', null)">Transactions</button>

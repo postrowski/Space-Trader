@@ -32,7 +32,7 @@ export abstract class Manager {
 	contractLoadStartTime = 0;
 
 	contract: Contract | null = null;
-	constructionSite: ConstructionSite | null = null;
+	constructionSite: ConstructionSite | undefined | null = null;
 
 	constructor(automationService: AutomationService, key: string) {
 		this.automationService = automationService;
@@ -67,7 +67,9 @@ export abstract class Manager {
 	addMessage(bot: Bot | null, message: string) {
 		this.automationService.addMessage(bot?.ship || null, message);
 	}
-	
+	getBotsInSystem(systemSymbol: string): Bot[] {
+		return this.shipBots.filter(b => b.ship.nav.systemSymbol == systemSymbol);
+	}
 	abstract doStep(bot: Bot, system: System, waypoint: WaypointBase, credits: number): void;
 
 	static waypointsToExploreBySystemSymbol = new Map<string, WaypointBase[]>();
@@ -75,7 +77,8 @@ export abstract class Manager {
 	                             explorationService: ExplorationService) {
 		Manager.waypointsToExploreBySystemSymbol.clear();
 		const waypointSymbols = new Set<string> (bots.map(bot => bot.ship.nav.waypointSymbol));
-		const systemSymbols = [...waypointSymbols].map(waypointSymbol => GalaxyService.getSystemSymbolFromWaypointSymbol(waypointSymbol));
+		let systemSymbols = [...waypointSymbols].map(waypointSymbol => GalaxyService.getSystemSymbolFromWaypointSymbol(waypointSymbol));
+		systemSymbols = [...new Set<string>(systemSymbols)];
 		for (const systemSymbol of systemSymbols) {
 			const system = systemsBySymbol.get(systemSymbol);
 			if (system) {
@@ -87,7 +90,7 @@ export abstract class Manager {
 	
 	step(systemsBySymbol: Map<string, System | null>,
          shipOperationBySymbol: Map<string, ExecutionStep>,
-         activeShips: string[],
+         automationEnabledShips: string[],
          credits: number) {
 		
 		this.contract = this.automationService.contract;
@@ -96,7 +99,7 @@ export abstract class Manager {
 		for (const bot of this.shipBots) {
 			const stepStart = Date.now();
 			// See if this ship is ready and able to do something for this manager:
-			if (activeShips.length > 0 && !activeShips.includes(bot.ship.symbol)) {
+			if (automationEnabledShips.length > 0 && !automationEnabledShips.includes(bot.ship.symbol)) {
 				continue;
 			}
 			if (bot.manager != this) {
@@ -161,13 +164,7 @@ export abstract class Manager {
 		if (hasUncharted) {
 			bot.chart(waypoint);
 		}
-		const waypointsToExplore = Manager.waypointsToExploreBySystemSymbol.get(system.symbol);
-		if (hasMarketplace) {
-			// When we are exploring, always keep as full a fuel tank as possible,
-			// otherwise keep 40% in the tank
-			let minPercent = (waypointsToExplore && (waypointsToExplore.length > 0)) ? 95 : 40;
-			bot.refuel(minPercent);
-		}
+		bot.refuel(40);
 		const tooOld = Date.now() - 1000 * 60 * 5; // 5 minutes ago 
 		if (hasMarketplace && !hasPriceData) {
 			// If this waypoint has a marketplace, but we dont have real price data:
@@ -187,20 +184,6 @@ export abstract class Manager {
 			this.jumpgateService.getJumpgate(waypoint.symbol, true);
 		}
 		
-		if (waypointsToExplore && waypointsToExplore.length > 0) {
-			// check to see which waypoints have ships already in-route or present:
-			for (const bot of this.automationService.shipBots) {
-				const index = waypointsToExplore.findIndex((way)=> way.symbol == bot.ship.nav.waypointSymbol);
-				if (index == -1) {
-					waypointsToExplore.splice(index, 1);
-				}
-			}
-			if (waypointsToExplore && waypointsToExplore.length > 0) {
-				// Navigate to the next waypoint that needs to be explored:
-				const loc = bot.traverseWaypoints(waypointsToExplore, waypoint, "exploring");
-			}
-		}
-		
 		if (hasShipyard) {
 			this.automationService.buyShips(waypoint);
 		}
@@ -213,6 +196,12 @@ export abstract class Manager {
 			return (bot.ship.symbol != otherBot.ship.symbol) && 
 					(otherBot.ship.nav.status !== 'IN_TRANSIT') && 
 					(bot.ship.nav.waypointSymbol == otherBot.ship.nav.waypointSymbol);
+		});
+	}
+	otherShipsInSystem(bot: Bot): Bot[] {
+		return this.shipBots.filter((otherBot) => {
+			return (bot.ship.symbol != otherBot.ship.symbol) && 
+					(bot.ship.nav.systemSymbol == otherBot.ship.nav.systemSymbol);
 		});
 	}
 	

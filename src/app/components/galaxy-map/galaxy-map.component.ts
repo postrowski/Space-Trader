@@ -2,7 +2,7 @@ import { AfterViewInit, Component, Input, ɵNgModuleTransitiveScopes } from '@an
 import { liveQuery } from 'dexie';
 import { Observable } from 'rxjs';
 import { AccountService } from 'src/app/services/account.service';
-import { DBService } from 'src/app/services/db.service';
+import { DBService, JumpLink } from 'src/app/services/db.service';
 import { FleetService } from 'src/app/services/fleet.service';
 import { GalaxyService } from 'src/app/services/galaxy.service';
 import { SvgMap } from 'src/app/utils/svg-map';
@@ -218,41 +218,35 @@ export class GalaxyMapComponent extends SvgMap {
 		this.showLabels = this.objectScale > this.showLabelAtStarSize;
 	}
 	
-	jumpLines$: Observable<{ s1: LocXY; s2: LocXY }[]> = new Observable((observer) => {
-		const range = 2500;
-		const maxDistSquared = range * range;
-
+	jumpLines$: Observable<{ s1: WaypointBase; s2: WaypointBase}[]> = new Observable((observer) => {
 		if (this.showJumplines) {
-			this.dbService.systems
-				.filter((sys) => System.hasJumpGate(sys))
-				.sortBy('x') // Sort by the 'x' field
-				.then((jumpgateSystems: System[]) => {
-					const links: { s1: LocXY; s2: LocXY }[] = [];
-					for (let srcIndex = 0; srcIndex < jumpgateSystems.length; srcIndex++) {
-						const jumpgateSource = jumpgateSystems[srcIndex];
-						for (let scanDir = -1; scanDir < 2; scanDir += 2) {
-							for (let destIndex = srcIndex + scanDir; destIndex < jumpgateSystems.length && destIndex >= 0; destIndex += scanDir) {
-								const jumpgateDest = jumpgateSystems[destIndex];
-								if (
-									(scanDir === -1 && jumpgateSource.x - range > jumpgateDest.x) ||
-									(scanDir === 1 && jumpgateSource.x + range < jumpgateDest.x)
-								) {
-									// Since the jumpgateSystems are ordered by x,
-									// the x values will continue to increase,
-									// there is no point in looking for more
-									break;
-								}
-								if (maxDistSquared > LocXY.getDistanceSquared(jumpgateSource, jumpgateDest)) {
-									links.push({ s1: jumpgateSource, s2: jumpgateDest });
-								}
-							}
+			this.dbService.systems.toArray().then((jumpgateSystems: System[]) => {
+				jumpgateSystems = jumpgateSystems.filter((sys) => System.hasJumpGate(sys));
+				//const jumpgateBySymbol = new Map<string, WaypointBase>();
+				const systemBySymbol = new Map<string, System>();
+				jumpgateSystems.forEach(sys => {
+					for (const way of sys.waypoints || []) {
+						if (WaypointBase.isJumpGate(way)) {
+							//jumpgateBySymbol.set(way.symbol, way);
+							systemBySymbol.set(way.symbol, sys);
+							break;
+						}
+					}
+				});
+				
+				this.dbService.jumplinks.toArray().then((jumpLinks: JumpLink[]) => {
+					const links: { s1: WaypointBase; s2: WaypointBase}[] = [];
+					for (const jumpLink of jumpLinks) {
+						const fromSys: WaypointBase | undefined = systemBySymbol.get(jumpLink.fromSymbol);
+						const toSys: WaypointBase | undefined = systemBySymbol.get(jumpLink.toSymbol);
+						if (fromSys && toSys) {
+							links.push({s1: fromSys, s2: toSys});
 						}
 					}
 					observer.next(links);
 					observer.complete();
-				}, (error) => {
-					console.error(`error ${error}`);
 				});
+			});
 		} else {
 			observer.next([]);
 			observer.complete();

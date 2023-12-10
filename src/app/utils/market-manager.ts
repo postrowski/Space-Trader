@@ -47,18 +47,6 @@ export class MarketManager extends Manager {
 		if (Ship.containsModule(bot.ship, "MODULE_WARP_DRIVE_")) {
 			// we can warp to nearby systems
 		} else if (system) {
-			const nextSystemSymbol = this.explorationService.exploreSystems(bot.ship);
-			if (nextSystemSymbol && nextSystemSymbol != bot.ship.nav.systemSymbol) {
-				const jumpgates = this.automationService.jumpgateService.getJumpgatesBySystemSymbol(bot.ship.nav.systemSymbol);
-				if (jumpgates && jumpgates.length > 0) {
-					const waypoint = this.galaxyService.getWaypointByWaypointSymbol(jumpgates[0].symbol!);
-					if (waypoint) {
-						bot.navigateTo(waypoint, null,
-										`Going to jumpgate at ${waypoint.symbol} to explore system.`);
-					}
-					bot.jumpTo(nextSystemSymbol);
-				}
-			}
 			// First look for markets we haven't visited in 12 hours or more
 			this.exploreMarkets(bot, startingLoc, system, Date.now() - 1000 * 60 * 60 * 12);
 			// Then check for markets we haven't visited within the last 30 minutes

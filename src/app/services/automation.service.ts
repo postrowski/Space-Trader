@@ -25,6 +25,7 @@ import { MineManager } from '../utils/mine-manager';
 import { Manager } from '../utils/manager';
 import { PairManager } from '../utils/pair-manager';
 import { ConstructionManager } from '../utils/construction-manager';
+import { ExploreManager } from '../utils/explore-manager';
 
 @Injectable({
 	providedIn: 'root'
@@ -36,12 +37,13 @@ export class AutomationService {
 	running$: Observable<boolean> = this.runningSubject.asObservable();
 
 	errorCount = 0;
+	stepCount = 0;
 	millisPerStep = 350;
 
 	agent: Agent | null = null;
 	shipBots: Bot[] = [];
 	contract: Contract | null = null;
-	constructionSite: ConstructionSite | null = null;
+	constructionSite: ConstructionSite | undefined | null = undefined;
 	systemsBySymbol = new Map<string, System | null>();
 	shipOperationBySymbol = new Map<string, ExecutionStep>();
 
@@ -56,6 +58,7 @@ export class AutomationService {
 	pairManagers: PairManager[] = [];
 	mineManager: MineManager | null = null;
 	constructionManager: ConstructionManager | null = null;
+	explorationManager: ExploreManager | null = null;
 	managers: Manager[] = [];
 	executionSteps: {timeElapsed: number, ship: string, manager: string, operation: string}[] = [];
 		
@@ -75,10 +78,12 @@ export class AutomationService {
 		this.tradeManager = new TradeManager(this, 'trade');
 		this.mineManager = new MineManager(this, 'mine');
 		this.constructionManager = new ConstructionManager(this, 'const');
+		this.explorationManager = new ExploreManager(this, 'xplor');
 		this.managers.push(this.marketManager);
 		this.managers.push(this.tradeManager);
 		this.managers.push(this.mineManager);
 		this.managers.push(this.constructionManager);
+		this.managers.push(this.explorationManager);
 		this.fleetService.allShips$.subscribe((ships) => {
 			for (let ship of ships) {
 				let found = false;
@@ -123,7 +128,7 @@ export class AutomationService {
 		this.agent = null;
 		this.shipBots = [];
 		this.contract = null;
-		this.constructionSite = null;
+		this.constructionSite = undefined;
 		this.systemsBySymbol = new Map<string, System | null>();
 		this.shipOperationBySymbol = new Map<string, ExecutionStep>();
 
@@ -231,6 +236,14 @@ export class AutomationService {
 			this.step();
 		}, this.millisPerStep);
 	}
+	stopOne(bot: Bot) {
+		for (const automationEnabledShip of this.automationEnabledShips) {
+			if (automationEnabledShip.shipSymbol.toLowerCase() == bot.ship.symbol.toLowerCase()) {
+				automationEnabledShip.value = false;
+				return;
+			}
+		}
+	}
 	stop() {
 		if (this.interval) {
 			clearInterval(this.interval);
@@ -242,14 +255,9 @@ export class AutomationService {
 		this.step();
 	}
 	
-	activeShips: string[] = [];
-	setActiveShips(activeShips: { shipSymbol: string, value: boolean }[]) {
-		this.activeShips = [];
-		for (const activeShip of activeShips) {
-			if (activeShip.value) {
-				this.activeShips.push(activeShip.shipSymbol);
-			}
-		}
+	automationEnabledShips: { shipSymbol: string, value: boolean }[] = [];
+	setAutomationEnabledShips(automationEnabledShips: { shipSymbol: string, value: boolean }[]) {
+		this.automationEnabledShips = automationEnabledShips;
 	}
 
 	prepare() {
@@ -259,6 +267,7 @@ export class AutomationService {
 			this.contractService.getAllContracts();
 		}
 		this.errorCount = 0;
+		this.stepCount = 0;
 		
 		for (const bot of this.shipBots) {
 			bot.prepare();
@@ -306,7 +315,7 @@ export class AutomationService {
 			} else {
 				this.acceptContract();
 			}
-			if (this.constructionSite == null && this.agent) {
+			if (this.constructionSite === undefined && this.agent) {
 				const systemSymbol = GalaxyService.getSystemSymbolFromWaypointSymbol(this.agent.headquarters);
 				const system = this.systemsBySymbol.get(systemSymbol);
 				for (const waypoint of system?.waypoints || []) {
@@ -316,61 +325,14 @@ export class AutomationService {
 				}
 			}
 			
+			const botsBySystem = new Map<string, Bot[]>();
 			const botsByWaypointSymbol = new Map<string, Bot[]>();
 			for (const bot of this.shipBots) {
-				if (bot.manager == null) {
-					if (bot.role == Role.Explorer && this.marketManager) {
-						this.addMessage(bot.ship, `Adding ship ${bot.ship.symbol} to market manager`);
-						this.marketManager.addBot(bot);
-					} else if ((bot.role == Role.Miner || bot.role == Role.Siphon) && this.mineManager) {
-						this.addMessage(bot.ship, `Adding ship ${bot.ship.symbol} to mine manager`);
-						this.mineManager.addBot(bot);
-					} else if (bot.role == Role.Surveyor) {
-						for (const pairManager of this.pairManagers) {
-							if (pairManager.surveyBot == null && pairManager.role == Role.Miner) {
-								this.addMessage(bot.ship, `Pairing surveyor ship ${bot.ship.symbol} with pair ${pairManager.key}`);
-								pairManager.addBot(bot);
-								break;
-							}
-						}
-					} else if (this.tradeManager && this.constructionManager) {
-						if ((this.tradeManager.shipBots.length/3) > this.constructionManager.shipBots.length &&
-							this.constructionManager.shipBots.length < 1) {
-							this.addMessage(bot.ship, `Adding ship ${bot.ship.symbol} to construction manager`);
-							this.constructionManager.addBot(bot);
-						} else {
-							this.addMessage(bot.ship, `Adding ship ${bot.ship.symbol} to trade manager`);
-							this.tradeManager.addBot(bot);
-						}
-					}
-					
-					if (this.mineManager && this.tradeManager && 
-						this.tradeManager.shipBots.length > 3 &&
-						this.mineManager.shipBots.length > 0) {
-						const mineBot = this.mineManager.shipBots[this.mineManager.shipBots.length-1];
-						const tradeBot = this.tradeManager.shipBots[this.tradeManager.shipBots.length-1];
-						let fail = true;
-						if (mineBot && tradeBot && this.mineManager.removeBot(mineBot)) {
-							if (this.tradeManager.removeBot(tradeBot)) {
-								const pairManager = new PairManager(this, 'pair' + this.pairManagers.length);
-								if (pairManager.addBot(mineBot) && pairManager.addBot(tradeBot)) {
-									this.pairManagers.push(pairManager);
-									this.managers.push(pairManager);
-									this.addMessage(tradeBot.ship, `Pairing hauler ship ${tradeBot.ship.symbol} with miner ${mineBot.ship.symbol} in pair ${pairManager.key}`);
-									this.addMessage(mineBot.ship, `Pairing hauler ship ${tradeBot.ship.symbol} with miner ${mineBot.ship.symbol} in pair ${pairManager.key}`);
-									fail = false;
-								} else {
-									pairManager.removeBot(tradeBot);
-									pairManager.removeBot(mineBot);
-								}
-							}
-						}
-						if (mineBot && tradeBot && fail) {
-							this.mineManager.addBot(mineBot);
-							this.tradeManager.addBot(tradeBot);
-						}
-					}
+				if (!botsBySystem.has(bot.ship.nav.systemSymbol)) {
+					botsBySystem.set(bot.ship.nav.systemSymbol, []);
 				}
+				botsBySystem.get(bot.ship.nav.systemSymbol)!.push(bot);
+
 				if (bot.ship.nav.status != 'IN_TRANSIT') {
 					const waypointSymbol = bot.ship.nav.waypointSymbol;
 					if (!botsByWaypointSymbol.has(waypointSymbol)) {
@@ -379,6 +341,7 @@ export class AutomationService {
 					botsByWaypointSymbol.get(waypointSymbol)!.push(bot);
 				}
 			}
+			this.assignBotsToManagers(botsBySystem);
 			const credits = this.agent?.credits || 0;
 			
 			const systemSymbols = this.shipBots.map(bot => bot.ship?.nav?.waypointSymbol)
@@ -401,13 +364,30 @@ export class AutomationService {
 			
 			Manager.getWaypointsToExplore(this.systemsBySymbol, this.shipBots, this.explorationService);
 
-			for (const manager of this.managers) {
-				executionStep.manager = manager.key;
-				manager.step(this.systemsBySymbol, this.shipOperationBySymbol, this.activeShips, credits);
+			const automationEnabledShipSymbols = this.automationEnabledShips
+													.filter(a=>a.value)
+													.map(a=>a.shipSymbol);
+
+			this.stepCount++;													
+			if (this.stepCount % 25) {
+				// Make sure we get a chance to update our galaxies and waypoints at least ever 25th step
+				this.galaxyService.completeIncompleteGalaxies();
+				this.galaxyService.getNextPageOfWaypoints();
 			}
-			executionStep.manager = '';
+			for (const manager of [this.explorationManager, 
+									this.marketManager,
+									//this.constructionManager,
+									this.tradeManager,
+									...this.pairManagers,
+									this.mineManager]){
+				if (manager) {
+					executionStep.manager = manager.key;
+					manager.step(this.systemsBySymbol, this.shipOperationBySymbol, automationEnabledShipSymbols, credits);
+				}
+			}
 			this.galaxyService.completeIncompleteGalaxies();
 			this.galaxyService.getNextPageOfWaypoints();
+			executionStep.manager = '';
 		} catch (error) {
 			if (error instanceof ExecutionStep) {
 				const step = error as ExecutionStep;
@@ -444,6 +424,78 @@ export class AutomationService {
 
 	}
 	
+	assignBotsToManagers(botsBySystem: Map<string, Bot[]>) {
+		for (const bot of this.shipBots) {
+			if (bot.manager) {
+				continue;
+			}
+			if (botsBySystem.get(bot.ship.nav.systemSymbol)?.length == 1 && this.explorationManager) {
+				this.addMessage(bot.ship, `Adding ship ${bot.ship.symbol} to exploration manager`);
+				this.explorationManager.addBot(bot);
+			} else if (bot.role == Role.Explorer && this.marketManager && this.marketManager.getBotsInSystem(bot.ship.nav.systemSymbol).length == 0) {
+				this.addMessage(bot.ship, `Adding ship ${bot.ship.symbol} to market manager`);
+				this.marketManager.addBot(bot);
+			} else if (bot.role == Role.Explorer && this.explorationManager) {
+				this.addMessage(bot.ship, `Adding ship ${bot.ship.symbol} to exploration manager`);
+				this.explorationManager.addBot(bot);
+			} else if ((bot.role == Role.Miner || bot.role == Role.Siphon) && this.mineManager) {
+				this.addMessage(bot.ship, `Adding ship ${bot.ship.symbol} to mine manager`);
+				this.mineManager.addBot(bot);
+			} else if (bot.role == Role.Surveyor) {
+				for (const pairManager of this.pairManagers) {
+					if (pairManager.surveyBot == null && pairManager.role == Role.Miner) {
+						this.addMessage(bot.ship, `Pairing surveyor ship ${bot.ship.symbol} with pair ${pairManager.key}`);
+						pairManager.addBot(bot);
+						break;
+					}
+				}
+			} else if (this.tradeManager && this.constructionManager) {
+				if ((this.tradeManager.shipBots.length/3) > this.constructionManager.shipBots.length &&
+					this.constructionManager.shipBots.length < 1 &&
+					this.constructionSite !== null) {
+					this.addMessage(bot.ship, `Adding ship ${bot.ship.symbol} to construction manager`);
+					this.constructionManager.addBot(bot);
+				} else {
+					this.addMessage(bot.ship, `Adding ship ${bot.ship.symbol} to trade manager`);
+					this.tradeManager.addBot(bot);
+				}
+			}
+			// check if we should pull a hauler and a miner to make a pair:					
+			if (this.mineManager && this.tradeManager && 
+				this.tradeManager.shipBots.length > 3 &&
+				this.mineManager.shipBots.length > 0) {
+				const mineBot = this.mineManager.shipBots[this.mineManager.shipBots.length-1];
+				let tradeBot = null;
+				// find a hauler from the traderManager that is in the same system as this miner:
+				for (const traderBot of this.tradeManager.shipBots) {
+					if (mineBot.ship.nav.systemSymbol == traderBot.ship.nav.systemSymbol) {
+						tradeBot = traderBot;
+						break;
+					}
+				}
+				let fail = true;
+				if (mineBot && tradeBot && this.mineManager.removeBot(mineBot)) {
+					if (this.tradeManager.removeBot(tradeBot)) {
+						const pairManager = new PairManager(this, 'pair' + this.pairManagers.length);
+						if (pairManager.addBot(mineBot) && pairManager.addBot(tradeBot)) {
+							this.pairManagers.push(pairManager);
+							this.managers.push(pairManager);
+							this.addMessage(tradeBot.ship, `Pairing hauler ship ${tradeBot.ship.symbol} with miner ${mineBot.ship.symbol} in pair ${pairManager.key}`);
+							this.addMessage(mineBot.ship, `Pairing hauler ship ${tradeBot.ship.symbol} with miner ${mineBot.ship.symbol} in pair ${pairManager.key}`);
+							fail = false;
+						} else {
+							pairManager.removeBot(tradeBot);
+							pairManager.removeBot(mineBot);
+						}
+					}
+				}
+				if (mineBot && tradeBot && fail) {
+					this.mineManager.addBot(mineBot);
+					this.tradeManager.addBot(tradeBot);
+				}
+			}
+		}
+	}
 	findFirstFastestShipInSystem(systemSymbol: string): Bot | null {
 		systemSymbol = GalaxyService.getSystemSymbolFromWaypointSymbol(systemSymbol);
 		let fastestShip: Bot | null = null;
@@ -547,7 +599,7 @@ export class AutomationService {
 	}
 
 	getConstructionSite(waypointSymbol: string) {
-		if (!this.constructionSite) {
+		if (this.constructionSite !== null) {
 			const step = new ExecutionStep(null, `getting Construction Site`, 'site');
 			this.constructionService.getConstructionSite(waypointSymbol)
 			                        .subscribe((response) => {
@@ -598,43 +650,76 @@ export class AutomationService {
 	
 	getShipTypeToBuy(): ShipConfig | null {
 		const idealFleet: ShipConfig[] = [
-			this.frigate,
-			this.probe,
-			this.lightFreighter,
-			this.siphoner,
-			this.lightFreighter,
-			this.lightFreighter,
-			this.lightFreighter,
-			this.lightFreighter,
-			this.miner,
-			this.surveyor,
-			this.lightFreighter,
-			this.lightFreighter,
-			this.lightFreighter,
-			this.lightFreighter,
-			this.miner,
-			this.surveyor,
-			this.lightFreighter,
-			this.lightFreighter,
-			this.lightFreighter,
-			this.miner,
-			this.surveyor,
-			this.lightFreighter,
-			this.lightFreighter,
-			this.lightFreighter,
-			this.miner,
-			this.surveyor,
-			this.lightFreighter,
-			this.lightFreighter,
-			this.lightFreighter,
-			this.miner,
-			this.surveyor,
-			this.surveyor,
-			//this.lightFreighter,
-			//this.lightFreighter,
-			//this.lightFreighter,
-			//this.miner,
-			//this.surveyor,
+			/*01*/this.frigate,
+			/*02*/this.probe,
+			/*03*/this.lightFreighter,
+			/*04*/this.siphoner,
+			/*05*/this.lightFreighter,
+			/*06*/this.lightFreighter,
+			/*07*/this.lightFreighter,
+			/*08*/this.lightFreighter,
+			/*09*/this.miner,
+			/*10*/this.surveyor,
+			/*11*/this.lightFreighter,
+			/*12*/this.lightFreighter,
+			/*13*/this.lightFreighter,
+			/*14*/this.lightFreighter,
+			/*15*/this.lightFreighter,
+			/*16*/this.lightFreighter,
+			/*17*/this.lightFreighter,
+			/*18*/this.lightFreighter,
+			/*19*/this.lightFreighter,
+			/*20*/this.miner,
+			/*21*/this.surveyor,
+			/*22*/this.lightFreighter,
+			/*23*/this.lightFreighter,
+			/*24*/this.lightFreighter,
+			/*25*/this.lightFreighter,
+			/*26*/this.lightFreighter,
+			/*27*/this.lightFreighter,
+			/*28*/this.lightFreighter,
+			/*29*/this.lightFreighter,
+			/*30*/this.miner,
+			/*31*/this.surveyor,
+			/*32*/this.lightFreighter,
+			/*33*/this.lightFreighter,
+			/*34*/this.lightFreighter,
+			/*35*/this.lightFreighter,
+			/*36*/this.lightFreighter,
+			/*37*/this.lightFreighter,
+			/*38*/this.lightFreighter,
+			/*39*/this.miner,
+			/*40*/this.surveyor,
+			/*41*/this.lightFreighter,
+			/*42*/this.lightFreighter,
+			/*43*/this.lightFreighter,
+			/*44*/this.lightFreighter,
+			/*45*/this.lightFreighter,
+			/*46*/this.lightFreighter,
+			/*47*/this.miner,
+			/*48*/this.surveyor,
+			/*49*/this.lightFreighter,
+			/*50*/this.lightFreighter,
+			/*51*/this.probe,
+			/*52*/this.probe,
+			/*53*/this.probe,
+			/*54*/this.probe,
+			/*55*/this.probe,
+			/*56*/this.probe,
+			/*57*/this.probe,
+			/*58*/this.probe,
+			/*59*/this.probe,
+			/*60*/this.probe,
+			/*61*/this.probe,
+			/*62*/this.probe,
+			/*63*/this.probe,
+			/*64*/this.probe,
+			/*65*/this.probe,
+			/*66*/this.probe,
+			/*67*/this.probe,
+			/*68*/this.probe,
+			/*69*/this.probe,
+			/*70*///this.lightFreighter,
 		];
 		for (let bot of this.shipBots) {
 			let index = 0;

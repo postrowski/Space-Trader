@@ -82,6 +82,10 @@ export class CountdownComponent implements OnInit, OnChanges {
 			// and there are more than 1 cooldown object doing that, the timer
 			// will drop faster than it should.
 			this.remainingSeconds = Math.max(0, Math.floor((this.endTime - Date.now() + 999) / 1000));
+			if (this.totalSeconds == 0) {
+				// When we load a new ship, the this.endTime can be NaN. This fixes that:
+				this.remainingSeconds = 0;
+			}
 			if (this._cooldown) {
 				this._cooldown.remainingSeconds = this.remainingSeconds;
 			}

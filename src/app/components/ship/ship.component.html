@@ -1,53 +1,24 @@
 <table *ngIf="ship" class="th-right">
 	<tr>
-		<td colspan="6">
-			<div class="text-container">
-				<div>
-					{{ ship.symbol }}<br /> {{
-					ship.frame.name.toUpperCase() }}&nbsp;&nbsp;
-					({{ship.registration.role.toLowerCase() }})
-				</div>
-				<div>
-					<app-countdown [title]="'Cooldown'" [cooldown]="ship.cooldown"></app-countdown>
-				</div>
-			</div>
+		<td [title]="getShipPowerString(ship)">
+			{{ ship.symbol }}<br />
+			{{ship.frame.name.toUpperCase() }}&nbsp;&nbsp;
+			({{ship.registration.role.toLowerCase() }})
 		</td>
-		<td colspan="8">
-			<span *ngFor="let module of ship.modules" class='module' 
-title='Symbol:     {{ module?.symbol }}
-Description: {{ module?.description }}
-Capacity:    {{ module?.capacity }}
-Range:       {{ module?.range }}'>
-				{{module.name }}</span>
-			<span class='empty module'>{{ ship.frame.moduleSlots - ship.modules.length }} empty modules</span><br />
-			<span *ngFor="let mount of ship.mounts" class='mount'
-title='Symbol:      {{ mount?.symbol }}
-Description: {{ mount?.description }}
-Strength:    {{ mount?.strength }}
-Deposits:    {{ mount?.deposits?.join(", ")}}'>{{mount.name}}</span>
-			<span class='empty mount'>{{ ship.frame.mountingPoints - ship.mounts.length }} empty mounts</span><br />
+		<td>
+			<app-countdown [title]="'Cooldown'" [cooldown]="ship.cooldown"></app-countdown>
 		</td>
-	</tr>
-	<tr class="centered-tds">
-		<td *ngIf="ship.fuel"><app-vertical-progress-bar
-				[title]="'Fuel'" [value]="ship.fuel.current"
-				[maxValue]="ship.fuel.capacity"> </app-vertical-progress-bar></td>
-		<td><app-vertical-progress-bar [title]="'Frame'"
-				[value]="ship.frame.condition" [maxValue]="100">
-			</app-vertical-progress-bar></td>
-		<td [title]="getShipPowerString(ship)"><img src="assets\power.png" height="16"> <app-vertical-progress-bar
-				[title]="''" [value]="ship.reactor.condition" [maxValue]="100">
-			</app-vertical-progress-bar></td>
-		<td><app-vertical-progress-bar [title]="'Engine'"
-				[value]="ship.engine.condition" [maxValue]="100">
-			</app-vertical-progress-bar></td>
-		<td><img src="assets\crew.png" height="12"> <app-vertical-progress-bar
-				[title]="''" [value]="ship.crew.current"
-				[threshold]="ship.crew.required" [maxValue]="ship.crew.capacity">
-			</app-vertical-progress-bar></td>
-		<td *ngIf="ship.cargo" title="{{getShipInventory()}}"><app-vertical-progress-bar
-				[title]="'Cargo'" [value]="ship.cargo.units" [threshold]="0"
-				[maxValue]="ship.cargo.capacity"></app-vertical-progress-bar></td>
+		<td>
+			<div *ngIf="ship.fuel">
+				<app-vertical-progress-bar [title]="'Fuel'" [value]="ship.fuel.current"
+						[maxValue]="ship.fuel.capacity"></app-vertical-progress-bar>
+			</div> 
+		</td>
+		<td>
+			<div *ngIf="ship.cargo" title="{{getShipInventory()}}">
+				<app-vertical-progress-bar [title]="'Cargo'" [value]="ship.cargo.units" [threshold]="0"
+					[maxValue]="ship.cargo.capacity"></app-vertical-progress-bar></div>
+		</td>
 		<td>
 			<div *ngIf="ship.nav.status === 'IN_ORBIT'">
 				Orbiting <span class="link"
@@ -81,6 +52,21 @@ Deposits:    {{ mount?.deposits?.join(", ")}}'>{{mount.name}}</span>
 			<button *ngIf="ship.fuel.capacity" (click)="onRefuel(ship)">Refuel</button>
 			<button *ngIf="canRefine(ship)" (click)="onRefine(ship)">Refine</button>
 			<button *ngIf="canSiphon(ship)" (click)="onSiphon(ship)">Siphon</button>
+		</td>
+		<td>
+			<span *ngFor="let module of ship.modules" class='module' 
+title='Symbol:     {{ module?.symbol }}
+Description: {{ module?.description }}
+Capacity:    {{ module?.capacity }}
+Range:       {{ module?.range }}'>
+				{{module.name }}</span>
+			<span class='empty module'>{{ ship.frame.moduleSlots - ship.modules.length }} empty modules</span><br />
+			<span *ngFor="let mount of ship.mounts" class='mount'
+title='Symbol:      {{ mount?.symbol }}
+Description: {{ mount?.description }}
+Strength:    {{ mount?.strength }}
+Deposits:    {{ mount?.deposits?.join(", ")}}'>{{mount.name}}</span>
+			<span class='empty mount'>{{ ship.frame.mountingPoints - ship.mounts.length }} empty mounts</span><br />
 		</td>
 	</tr>
 </table>

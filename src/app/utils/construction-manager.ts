@@ -11,9 +11,9 @@ export class ConstructionManager extends Manager {
 	mode: 'contract' | 'construction' | 'both' = 'both';
 	doStep(bot: Bot, system: System, waypoint: WaypointBase, credits: number): void {
 		const otherShipsAtWaypoint = this.otherShipsAtWaypoint(bot);
-		if ((this.mode == 'both' && this.contract == null && this.constructionSite == null) ||
-		    (this.mode == 'contract' && this.contract == null) ||
-		    (this.mode == 'construction' && this.constructionSite == null)) {
+		if ((this.mode == 'both' && !this.contract && !this.constructionSite) ||
+		    (this.mode == 'contract' && !this.contract) ||
+		    (this.mode == 'construction' && !this.constructionSite)) {
 			return;
 		}
 		if (bot.currentTradeRoute == null) {
@@ -30,17 +30,19 @@ export class ConstructionManager extends Manager {
 		let itemFor = '';
 		let itemsToBuy: {symbol: string, units: number, itemFor: string, deliverTo: WaypointBase}[] = [];
 		let availableCredits = credits - 100_000;
-		let constructionSite = null;
+		let constructionSiteWaypoint = null;
 		if (this.constructionSite) {
-			constructionSite = this.galaxyService.getWaypointByWaypointSymbol(this.constructionSite.symbol);
-			for (const material of this.constructionSite.materials) {
-				const units = material.required - material.fulfilled;
-				if (units > 0 && constructionSite) {
-					itemsToBuy.push({
-						symbol: material.tradeSymbol,
-						units, itemFor: 'construction Site',
-						deliverTo: constructionSite
-					});
+			constructionSiteWaypoint = this.galaxyService.getWaypointByWaypointSymbol(this.constructionSite.symbol);
+			if (constructionSiteWaypoint) {
+				for (const material of this.constructionSite.materials) {
+					const units = material.required - material.fulfilled;
+					if (units > 0) {
+						itemsToBuy.push({
+							symbol: material.tradeSymbol,
+							units, itemFor: 'construction Site',
+							deliverTo: constructionSiteWaypoint
+						});
+					}
 				}
 			}
 		}
@@ -56,7 +58,7 @@ export class ConstructionManager extends Manager {
 				}
 			}
 		}*/
-		if (!constructionSite) {
+		if (!constructionSiteWaypoint) {
 			return null;
 		}
 		const sinceTime = Date.now() - 6 * 60 * 60 * 1000; // last 6 hours
@@ -97,7 +99,7 @@ export class ConstructionManager extends Manager {
 					sellItems: [],
 					deliverItems: [marketItem],
 					profit: 0,
-					route: {steps: [{loc: constructionSite, speed: 'CRUISE'}], time: 0, fuel: 0},
+					route: {steps: [{loc: constructionSiteWaypoint, speed: 'CRUISE'}], time: 0, fuel: 0},
 					travelTime: 0,
 					profitPerSecond: 0,
 					buyItem: null
@@ -126,7 +128,7 @@ export class ConstructionManager extends Manager {
 					sellItems: [],
 					deliverItems: [closestMarketItem],
 					profit: 0,
-					route: {steps: [{loc: constructionSite, speed: 'CRUISE'}], time: 0, fuel: 0},
+					route: {steps: [{loc: constructionSiteWaypoint, speed: 'CRUISE'}], time: 0, fuel: 0},
 					travelTime: 0,
 					profitPerSecond: 0,
 					buyItem: null
@@ -155,7 +157,7 @@ export class ConstructionManager extends Manager {
 						for (const item of latestMarketItemByTradeSymbol?.values() || []) {
 							if (item.type == MarketItemType.IMPORT && item.activity == activity) {
 								const sourceMarketItem = this.marketService.findCheapestMarketItemForSaleInSystem(marketWaypoint, item.symbol, space, true);
-								if (sourceMarketItem && sourceMarketItem.marketSymbol != constructionSite.symbol &&
+								if (sourceMarketItem && sourceMarketItem.marketSymbol != constructionSiteWaypoint.symbol &&
 								    sourceMarketItem.purchasePrice * space < availableCredits) {
 									const sourceMarketWaypoint = this.galaxyService.getWaypointByWaypointSymbol(sourceMarketItem.marketSymbol);
 									if (sourceMarketWaypoint) {

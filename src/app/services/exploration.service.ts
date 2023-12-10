@@ -41,7 +41,7 @@ export class ExplorationService {
 			return [];
 		}
 		return system.waypoints.filter((waypoint) => {
-				return WaypointBase.hasUncharted(waypoint) ||
+				return (WaypointBase.hasUncharted(waypoint) && !WaypointBase.isAsteroid(waypoint)) ||
 				       this.waypointNeedsToBeExplored(waypoint);
 		});
 	}
@@ -90,6 +90,7 @@ export class ExplorationService {
 			explorationPath.shift();
 			// go back to the top of the while loop, and we should either return the next destination, exit this loop
 		}
+		console.log(`ship ${ship.symbol} (at ${ship.nav.waypointSymbol} is set to explore ${explorationPath}`);
 
 		const shipsCurrentSystem = this.galaxyService.getSystemBySymbol(ship.nav.systemSymbol);
 		if (!shipsCurrentSystem || !this.headquarters) {
@@ -110,8 +111,8 @@ export class ExplorationService {
 		// If we can't explore from our headquarters, just explore from whereever we are
 		return this.exploreSystemsFrom(ship, shipsCurrentSystem);
 	}
+	
 	exploreSystemsFrom(ship: Ship, startSys: System): string | null {
-
 		// Get the set of waypoints that are the closest to our headquarters.
 		// This will be all jumpgate that are within N hops from the headquarters, that need to be visited,
 		// that don't currently have a ship in-route to. 
@@ -140,11 +141,15 @@ export class ExplorationService {
 				}
 			}
 			if (shortestPath.length > 1) {
+				console.log(`ship ${ship.symbol} (at ${ship.nav.waypointSymbol} going to explore ${shortestPath}`);
 				this.explorationPathByShipSymbol.set(ship.symbol, shortestPath);
 				this.shipSymbolExploringBySystemSymbol.set(shortestPath[shortestPath.length-1], ship.symbol);
 				// the first element is the source system, which is where this ship should already be,
 				// so we return the second system symbol
-				return shortestPath[1];
+				if (shortestPath[0] == ship.nav.waypointSymbol) {
+					return shortestPath[1];
+				}
+				return shortestPath[0];
 			}
 		}
 		return null;

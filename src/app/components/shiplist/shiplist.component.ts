@@ -167,13 +167,11 @@ export class ShiplistComponent implements OnInit {
 	}
 
 	canSurvey(ship: Ship) {
-		if (ship) {
-			for (let mount of ship.mounts) {
-				if (mount.symbol.startsWith('MOUNT_SURVEYOR'))
-					return true;
-			}
-		}
-		return false;
+		return ship?.mounts.some(mount => {return mount.symbol.startsWith('MOUNT_SURVEYOR')});
+	}
+
+	canMine(ship: Ship) {
+		return ship?.mounts.some(mount => {return mount.symbol.startsWith('MOUNT_MINING_LASER')});
 	}
 
 	onMine(ship: Ship) {

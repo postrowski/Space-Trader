@@ -67,6 +67,10 @@ export class JumpgateService {
 			this.allConnectedWaypointSymbols.add(waypointSymbol);
 		}
 	}
+	jumpgatesUnderConstruction = new Set<string>();
+	reportJumpgateUnderConstruction(waypointSymbol: string) {
+		this.jumpgatesUnderConstruction.add(waypointSymbol);
+	}
 
 	getClosestJumpGateSymbols(startSys: System, filterCallback: (jumpgateSystemSymbol: string) => boolean): Set<string> {
 		let currentGates: JumpGate[] | undefined = this.jumpgatesBySystemSymbol.get(startSys.symbol);
@@ -79,19 +83,21 @@ export class JumpgateService {
 					continue;
 				}
 				for (let waypointSymbols of gate.connections) {
-					let connectedGate: JumpGate | undefined = this.jumpgateByWaypointSymbol.get(waypointSymbols);
-					if (!connectedGate) { 
-						const waypoint = this.galaxyService.getWaypointByWaypointSymbol(waypointSymbols);
-						if (waypoint) {
-							if (filterCallback(waypoint.symbol)) {
-								validGateSystemSymbols.add(waypoint.symbol!);
+					if (!this.jumpgatesUnderConstruction.has(waypointSymbols)) {
+						let connectedGate: JumpGate | undefined = this.jumpgateByWaypointSymbol.get(waypointSymbols);
+						if (!connectedGate) { 
+							const waypoint = this.galaxyService.getWaypointByWaypointSymbol(waypointSymbols);
+							if (waypoint) {
+								if (filterCallback(waypoint.symbol)) {
+									validGateSystemSymbols.add(waypoint.symbol!);
+								}
 							}
-						}
-					} else if (connectedGate.symbol) {
-						if (filterCallback(connectedGate.symbol)) {
-							validGateSystemSymbols.add(connectedGate.symbol);
-						} else {
-							nextGates.push(connectedGate);
+						} else if (connectedGate.symbol) {
+							if (filterCallback(connectedGate.symbol)) {
+								validGateSystemSymbols.add(connectedGate.symbol);
+							} else {
+								nextGates.push(connectedGate);
+							}
 						}
 					}
 				}
@@ -108,36 +114,57 @@ export class JumpgateService {
 	findShortestPath(startSystemSymbol: string, endSystemSymbol: string): string[] | null {
 		const visited = new Set<string>();
 		const queue: {
-			symbol: string;
+			sysSymbol: string;
+			waySymbol: string;
 			path: string[]
 		}[] = [];
 
 		// Initialize the queue with the starting object
-		queue.push({
-			symbol: startSystemSymbol,
-			path: [startSystemSymbol]
-		});
+		if (startSystemSymbol == GalaxyService.getSystemSymbolFromWaypointSymbol(startSystemSymbol)) {
+			const localJumpGates = this.jumpgatesBySystemSymbol.get(startSystemSymbol);
+			for (const localJumpGate of localJumpGates || []) {
+				if (localJumpGate.symbol) {
+					queue.push({
+						sysSymbol: GalaxyService.getSystemSymbolFromWaypointSymbol(localJumpGate.symbol),
+						waySymbol: localJumpGate.symbol,
+						path: [localJumpGate.symbol]
+					});
+				}
+			}
+		} else {
+			queue.push({
+				sysSymbol: GalaxyService.getSystemSymbolFromWaypointSymbol(startSystemSymbol),
+				waySymbol: startSystemSymbol,
+				path: [startSystemSymbol]
+			});
+		}
 		visited.add(startSystemSymbol);
 
 		while (queue.length > 0) {
-			const { symbol, path } = queue.shift()!;
+			const { sysSymbol, waySymbol, path } = queue.shift()!;
 
 			// Check if the current object is the destination
-			if (symbol === endSystemSymbol) {
+			if (sysSymbol === endSystemSymbol) {
 				return path; // Found the shortest path
 			}
 
 			// Find the object in the jumpgates
-			const jumpgates = this.jumpgatesBySystemSymbol.get(symbol);
+			const jumpgates = this.jumpgatesBySystemSymbol.get(sysSymbol);
 			for (const jumpgate of jumpgates || []) {
-				for (const jumpgateSymbol of jumpgate?.connections || []) {
-					if (!visited.has(jumpgateSymbol)) {
-						visited.add(jumpgateSymbol);
-						// Add linked objects to the queue with the updated path
-						queue.push({
-							symbol: jumpgateSymbol,
-							path: [...path, jumpgateSymbol]
-						});
+				if (jumpgate.symbol == waySymbol) {
+					for (const jumpgateSymbol of jumpgate?.connections || []) {
+						if (this.jumpgatesUnderConstruction.has(jumpgateSymbol)) {
+							continue;
+						}
+						if (!visited.has(jumpgateSymbol)) {
+							visited.add(jumpgateSymbol);
+							// Add linked objects to the queue with the updated path
+							queue.push({
+								sysSymbol: GalaxyService.getSystemSymbolFromWaypointSymbol(jumpgateSymbol),
+								waySymbol: jumpgateSymbol,
+								path: [...path, jumpgateSymbol]
+							});
+						}
 					}
 				}
 			}

@@ -7,7 +7,9 @@
 		<td>
 			<table *ngIf="jumpgate != null">
 				<tr *ngFor="let waypointSymbol of jumpgate.connections">
-					<td (click)="onWaypointClicked(waypointSymbol)">{{waypointSymbol}}</td>
+					<td (click)="onWaypointClicked(waypointSymbol)"
+					[ngClass]="{ 'selectedWaypoint': selectedSystem && waypointSymbol.startsWith(selectedSystem.symbol) }"
+					>{{waypointSymbol}}</td>
 					<td><button (click)="onJump(waypointSymbol)">Jump</button></td>
 				</tr>
 			</table>
@@ -21,14 +23,7 @@
 <div>
 	<div>
 		Ships at jump gate:
-		<table *ngFor="let ship of shipsAtWaypoint"
-			[ngClass]="{ 'selected-ship': ship == selectedShip }"
-			(click)="onSelectShip(ship)">
-			<tr>
-				<th>{{ship.symbol}}</th>
-			</tr>
-		</table>
-		
+		<app-shiplist></app-shiplist>
 	</div>
 </div>
 </div>

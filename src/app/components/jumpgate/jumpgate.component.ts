@@ -1,11 +1,12 @@
-import { Component, Input } from '@angular/core';
+import { Component } from '@angular/core';
 import { FleetService } from 'src/app/services/fleet.service';
 import { GalaxyService } from 'src/app/services/galaxy.service';
 import { JumpgateService } from 'src/app/services/jumpgate.service';
 import { ModalService } from 'src/app/services/modal.service';
 import { JumpGate } from 'src/models/JumpGate';
 import { Ship } from 'src/models/Ship';
-import { WaypointBase, WaypointTrait } from 'src/models/WaypointBase';
+import { System } from 'src/models/System';
+import { WaypointBase } from 'src/models/WaypointBase';
 
 @Component({
   selector: 'app-jumpgate',
@@ -17,6 +18,7 @@ export class JumpgateComponent {
 	jumpgate?: JumpGate;
 	shipsAtWaypoint: Ship[] = [];
 	selectedShip: Ship | null = null;
+	selectedSystem: System | null = null;
 	constructor(public fleetService: FleetService,
 	            public jumpgateService: JumpgateService,
 	            public galaxyService: GalaxyService,
@@ -24,12 +26,17 @@ export class JumpgateComponent {
 		modalService.waypoint$.subscribe((response) => {
 			this.waypoint = response;
 			this.ngOnInit();
-		})
+		});
+		this.galaxyService.activeSystem$.subscribe((system) => {
+			this.selectedSystem = system;
+		});
+		this.fleetService.activeShip$.subscribe((ship) => {
+			this.selectedShip = ship;
+		});
 	}
 	
 	ngOnInit(): void {
-		this.loadShips();
-		this.loadJumpgate();
+		this.loadShipsAndJumpgate();
 	}
 	
 	loadJumpgate() {
@@ -41,11 +48,7 @@ export class JumpgateComponent {
 		}
 	}
 	
-	onSelectShip(ship: Ship) {
-		this.selectedShip = ship;
-	}
-	
-	loadShips() {
+	loadShipsAndJumpgate() {
 		this.fleetService.allShips$.subscribe((allShips) => {
 			this.shipsAtWaypoint.length = 0;
 			for (let ship of allShips) {
@@ -60,8 +63,12 @@ export class JumpgateComponent {
 			if (fleetActiveShip && this.shipsAtWaypoint.includes(fleetActiveShip)) {
 				this.selectedShip = fleetActiveShip;
 			}
+			this.loadJumpgate();
+		}, (error) => {
+			this.loadJumpgate();
 		})
 	}
+	
 	onWaypointClicked(waypointSymbol: string) {
 		this.galaxyService.setActiveSystemBySymbol(waypointSymbol);
 	}
@@ -71,8 +78,13 @@ export class JumpgateComponent {
 			this.fleetService.jumpShip(this.selectedShip.symbol, targetWaypoint)
 				.subscribe((response)=> {
 					this.galaxyService.setActiveSystemBySymbol(targetWaypoint);
+					this.modalService.close();
+				}, (error) => {
+					while (error.error) {
+						error = error.error;
+					}
+					alert(error.message);
 				});
-			this.modalService.close();
 		}
 	}
 }

@@ -54,6 +54,7 @@ export class SystemMapComponent extends SvgMap {
 			for (const ship of ships) {
 				this.shipsBySymbol.set(ship.symbol, ship);
 			}
+			this.updateShipLocsInSystem();
 		});
 
 		
@@ -91,6 +92,7 @@ export class SystemMapComponent extends SvgMap {
 		this.yOffset = this.height/2;
 		this.objectScale = .25;
 		this.uiWaypoints = UiWaypoint.getUiWaypointsFromSystem(this._system);
+		this.updateShipLocsInSystem();
 	}
 	
 	private startAnimationOffset() {

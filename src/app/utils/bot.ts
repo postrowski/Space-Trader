@@ -134,60 +134,64 @@ export class Bot {
 
 		const system = this.galaxyService.getSystemBySymbol(systemSymbol);
 		let mustGoSlower = false;
-		if (system && system.waypoints && this.ship.fuel.capacity > 0) {
-			const currentWaypoints = system.waypoints.filter((way) => way.symbol == this.ship.nav.waypointSymbol);
-			if (currentWaypoints && currentWaypoints.length == 1) {
-				const currentWaypoint = currentWaypoints[0];
-	
-				const dist = LocXY.getDistance(currentWaypoint, waypoint);
-				let fuelNeeded = Ship.getFuelUsed(this.ship, flightMode, dist);
-				mustGoSlower = fuelNeeded > (this.ship.fuel.current - 2);
-				if (mustGoSlower && hasFuelStation && fuelNeeded < this.ship.fuel.capacity - 2) {
-					this.refuel(100);
+		if (!system?.waypoints) {
+			return;
+		}
+		const currentWaypoints = system.waypoints.filter((way) => way.symbol == this.ship.nav.waypointSymbol);
+		if (!currentWaypoints || currentWaypoints.length != 1) {
+			return;
+		}
+		const currentWaypoint = currentWaypoints[0];
+		const dist = LocXY.getDistance(currentWaypoint, waypoint);
+		if (this.ship.fuel.capacity > 0) {
+
+			let fuelNeeded = Ship.getFuelUsed(this.ship, flightMode, dist);
+			mustGoSlower = fuelNeeded > (this.ship.fuel.current - 2);
+			if (mustGoSlower && hasFuelStation && fuelNeeded < this.ship.fuel.capacity - 2) {
+				this.refuel(100);
+			}
+			if (mustGoSlower) {
+				// Try to find an intermediate fuel station:
+				const fuelWaypoints = system.waypoints.filter((wp) => fuelPricesByWaypointSymbol.has(wp.symbol));
+				let maxFuel = this.ship.fuel.current;
+				if (hasFuelStation) {
+					maxFuel = this.ship.fuel.capacity;
 				}
-				if (mustGoSlower) {
-					// Try to find an intermediate fuel station:
-					const fuelWaypoints = system.waypoints.filter((wp) => fuelPricesByWaypointSymbol.has(wp.symbol));
-					let maxFuel = this.ship.fuel.current;
-					if (hasFuelStation) {
-						maxFuel = this.ship.fuel.capacity;
-					}
-					const maxRange = maxFuel * (dist / fuelNeeded);
-					const fuelWaypointsInRange = fuelWaypoints.filter((wp) => LocXY.getDistance(this.ship.nav.route.destination, wp) < maxRange);
-					if (fuelWaypointsInRange.length > 0) {
-						fuelWaypointsInRange.push(currentWaypoint);
-						const fuelStationsNearestToDest = ExplorationService.sortWaypointsByDistanceFrom(fuelWaypointsInRange, waypoint);
-						while (fuelStationsNearestToDest.length > 0) {
-							const fuelStationNearestToDest = fuelStationsNearestToDest.shift();
-							if (fuelStationNearestToDest) {
-								// make sure we are actually getting closer to our destination:
-								const newDist = LocXY.getDistance(fuelStationNearestToDest, waypoint);
-								if (newDist < dist) {
-									const message = `Trying to get to ${waypoint.symbol} (dist: ${dist}) via ${fuelStationNearestToDest.symbol} (dist: ${newDist})`;
-									console.log(this.ship.symbol + ': ' + message);
-									this.addMessage(message);
-									this.navigateTo(fuelStationNearestToDest, flightMode, message);
-								}
+				const maxRange = maxFuel * (dist / fuelNeeded);
+				const fuelWaypointsInRange = fuelWaypoints.filter((wp) => LocXY.getDistance(this.ship.nav.route.destination, wp) < maxRange);
+				if (fuelWaypointsInRange.length > 0) {
+					fuelWaypointsInRange.push(currentWaypoint);
+					const fuelStationsNearestToDest = ExplorationService.sortWaypointsByDistanceFrom(fuelWaypointsInRange, waypoint);
+					while (fuelStationsNearestToDest.length > 0) {
+						const fuelStationNearestToDest = fuelStationsNearestToDest.shift();
+						if (fuelStationNearestToDest) {
+							// make sure we are actually getting closer to our destination:
+							const newDist = LocXY.getDistance(fuelStationNearestToDest, waypoint);
+							if (newDist < dist) {
+								const message = `Trying to get to ${waypoint.symbol} (dist: ${dist}) via ${fuelStationNearestToDest.symbol} (dist: ${newDist})`;
+								console.log(this.ship.symbol + ': ' + message);
+								this.addMessage(message);
+								this.navigateTo(fuelStationNearestToDest, flightMode, message);
 							}
 						}
 					}
 				}
 			}
-
-			// TODO: get this bestRouteTo working!
-			/*				const system = this.galaxyService.getSystemBySymbol(this.ship.nav.waypointSymbol);
-							const waypointFrom = this.galaxyService.getWaypointByWaypointSymbol(this.ship.nav.waypointSymbol);
-							if (waypointFrom && system) {
-								const route = ExplorationService.bestRouteTo(waypointFrom, waypoint, system, this.marketService,
-																	this.ship.fuel.current, this.ship.fuel.capacity, 0);
-								if (route && route.path.length>0) {
-									const waypointTo = this.galaxyService.getWaypointByWaypointSymbol(route.path[0].symbol);
-									if (waypointTo) {
-										this.navigateTo(waypointTo, flightMode, '?');
-									}
-								}
-							}*/
 		}
+
+		// TODO: get this bestRouteTo working!
+		/*				const system = this.galaxyService.getSystemBySymbol(this.ship.nav.waypointSymbol);
+						const waypointFrom = this.galaxyService.getWaypointByWaypointSymbol(this.ship.nav.waypointSymbol);
+						if (waypointFrom && system) {
+							const route = ExplorationService.bestRouteTo(waypointFrom, waypoint, system, this.marketService,
+																this.ship.fuel.current, this.ship.fuel.capacity, 0);
+							if (route && route.path.length>0) {
+								const waypointTo = this.galaxyService.getWaypointByWaypointSymbol(route.path[0].symbol);
+								if (waypointTo) {
+									this.navigateTo(waypointTo, flightMode, '?');
+								}
+							}
+						}*/
 		
 		this.orbit();
 		if (mustGoSlower) {
@@ -201,8 +205,14 @@ export class Bot {
 		}
 		
 		this.setFlightMode(flightMode);
+		const travelTime = Ship.getTravelTime(this.ship, flightMode, dist);
+		const etaStr = new Intl.DateTimeFormat('en-US', {
+			hour: '2-digit',
+			minute: '2-digit',
+			second: '2-digit'
+		}).format(new Date(Date.now() + travelTime * 1000));
 
-		this.currentStep = new ExecutionStep(this, `Navigate to ${waypoint.symbol} (at ${flightMode})`, 'nav');
+		this.currentStep = new ExecutionStep(this, `Navigate to ${waypoint.symbol} (at ${flightMode}, dist ${dist}, ETA: ${etaStr} (${travelTime} secs)`, 'nav');
 		this.fleetService.navigateShip(this.ship.symbol, waypoint.symbol)
 		                 .subscribe((response) => {
 			this.completeStep();
@@ -213,7 +223,8 @@ export class Bot {
 	}
 
 	jumpTo(waypointSymbol: string){
-		if (this.ship.nav.waypointSymbol != waypointSymbol) {
+		if ((this.ship.nav.waypointSymbol != waypointSymbol) &&
+			(this.ship.cooldown.remainingSeconds === 0)) {
 			this.orbit();
 			this.currentStep = new ExecutionStep(this, `Jump to ${waypointSymbol}`, 'jump');
 			this.fleetService.jumpShip(this.ship.symbol, waypointSymbol)
@@ -272,18 +283,18 @@ export class Bot {
 			throw this.currentStep;
 		}
 	}
-	canSellOrJettisonCargo(itemSymbol: string, contract: Contract | null, constructionSite: ConstructionSite | null) {
+	canSellOrJettisonCargo(itemSymbol: string, contract: Contract | null, constructionSite: ConstructionSite | null | undefined) {
 		// dont jettison anti matter, modules or mounts
 		if (itemSymbol.toUpperCase().includes('ANTIMATTER') ||
 			itemSymbol.toUpperCase().startsWith('MODULE') ||
 			itemSymbol.toUpperCase().startsWith('MOUNT')) {
 			return false;
 		}
-		if (contract != null &&
+		if (contract &&
 			ContractService.getContractDeliverable(itemSymbol, contract) != null) {
 			return false;
 		}
-		if (constructionSite != null &&
+		if (constructionSite &&
 			ConstructionService.getConstructionMaterial(itemSymbol, constructionSite) != null) {
 			return false;
 		}
@@ -293,7 +304,7 @@ export class Bot {
 		return true;
 	}
 	
-	jettisonUnsellableCargo(waypoint: WaypointBase, contract: Contract | null, constructionSite: ConstructionSite | null) {
+	jettisonUnsellableCargo(waypoint: WaypointBase, contract: Contract | null, constructionSite: ConstructionSite | null | undefined) {
 		for (const inv of this.ship.cargo.inventory) {
 			if (this.canSellOrJettisonCargo(inv.symbol, contract, constructionSite)) {
 				// Assume a full load
@@ -542,7 +553,7 @@ export class Bot {
 			}
 		}
 	}
-	sellAll(waypoint: WaypointBase, contract: Contract | null, constructionSite: ConstructionSite | null, otherBotsAtWaypoint: Bot[]) {
+	sellAll(waypoint: WaypointBase, contract: Contract | null, constructionSite: ConstructionSite | null | undefined, otherBotsAtWaypoint: Bot[]) {
 		if (this.ship.nav.status === 'IN_TRANSIT') {
 			return
 		}
@@ -570,7 +581,7 @@ export class Bot {
 		}
 	}
 	sellAtBestLocation(waypoint: WaypointBase, contract: Contract | null,
-	                   constructionSite: ConstructionSite | null, otherBotsAtWaypoint: Bot[]) {
+	                   constructionSite: ConstructionSite | null | undefined, otherBotsAtWaypoint: Bot[]) {
 		if (this.ship.nav.status === 'IN_TRANSIT') {
 			return
 		}
@@ -616,7 +627,7 @@ export class Bot {
 		}
 	}
 	
-	deliverAll(contract: Contract | null, constructionSite: ConstructionSite | null, onlyIfFull: boolean, allowTravel: boolean) {
+	deliverAll(contract: Contract | null, constructionSite: ConstructionSite | null | undefined, onlyIfFull: boolean, allowTravel: boolean) {
 		if (this.ship.nav.status === 'IN_TRANSIT' || this.ship.cargo.units === 0 || (!contract && !constructionSite)) {
 			return;
 		}
@@ -939,8 +950,8 @@ export class Bot {
 		// We add two to the errorCount, because the call to completeStep decrements by 1, and we need to overcome that
 		this.errorCount += 2; 
 		if (this.errorCount > 10) {
-			this.addMessage("10 consecutive Error conditions! stopping.");
-			this.automationService.stop();
+			this.addMessage("10 consecutive Error conditions! stopping this bot.");
+			this.automationService.stopOne(this);
 		}
 	}
 	completeStep() {

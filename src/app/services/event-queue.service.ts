@@ -47,8 +47,9 @@ export class EventQueueService {
 		const totalTripDurationMilliseconds = (arrival.getTime() - departure.getTime());
 		let departureLoc: LocXY = ship.nav.route.origin;
 		let destinationLoc: LocXY  = ship.nav.route.destination;
-		const departureSystemSymbol = ship.nav.route.origin.systemSymbol; 
-		const destinationSytemSymbol = ship.nav.route.destination.systemSymbol; 
+		let departureSystemSymbol = ship.nav.route.origin.systemSymbol; 
+		let destinationSytemSymbol = ship.nav.route.destination.systemSymbol;
+
 		if (withinSystem) {
 			const uiWaypoints = UiWaypoint.getUiWaypointsFromSystem(withinSystem);
 			for (let uiWaypoint of uiWaypoints) {
@@ -60,6 +61,10 @@ export class EventQueueService {
 				}
 			}
 		}
+		if (Date.now() > arrival.getTime()) {
+			departureLoc = destinationLoc;
+			departureSystemSymbol = destinationSytemSymbol;
+		}
 		const movementTracker = setInterval(() => {
 			const now = Date.now();
 			const tripDurationSoFarMilliseconds = (now - departure.getTime());
@@ -69,6 +74,10 @@ export class EventQueueService {
 				if (percentComplete > 1) {
 					percentComplete = 1;
 				}
+			}
+			if (percentComplete == 1) {
+				// This solves the issue of a ship location being galactic after a jump.
+				departureLoc = destinationLoc;
 			}
 			if (departureSystemSymbol == destinationSytemSymbol) {
 				// Call the callback with the updated value
@@ -80,15 +89,17 @@ export class EventQueueService {
 			} else {
 				// Call the callback with the updated value
 				this.dbService.systems.get(departureSystemSymbol).then((srcSys) => {
-					this.dbService.systems.get(destinationSytemSymbol).then((destSys) =>{
-						if (destSys && srcSys) {
-							const shipLoc = new LocXY(
-								(destSys.x - srcSys.x) * percentComplete + srcSys.x,
-								(destSys.y - srcSys.y) * percentComplete + srcSys.y
-							);
-							callback(departureSystemSymbol, shipLoc);
-						}
-					});
+					if (srcSys) {
+						this.dbService.systems.get(destinationSytemSymbol).then((destSys) =>{
+							if (destSys) {
+								const shipLoc = new LocXY(
+									(destSys.x - srcSys.x) * percentComplete + srcSys.x,
+									(destSys.y - srcSys.y) * percentComplete + srcSys.y
+								);
+								callback(destinationSytemSymbol, shipLoc);
+							}
+						});
+					}
 				});
 			}
 			

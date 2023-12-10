@@ -26,6 +26,7 @@ import { ShipMount } from 'src/models/ShipMount';
 import { GalaxyService } from './galaxy.service';
 import { Meta } from 'src/models/Meta';
 import { JumpTransaction } from 'src/models/JumpTransaction';
+import { JumpgateService } from './jumpgate.service';
 
 @Injectable({
 	providedIn: 'root'
@@ -53,6 +54,7 @@ export class FleetService implements OnInit {
 	            public surveyService: SurveyService, 
 	            public eventQueueService: EventQueueService,
 	            public galaxyService: GalaxyService,
+	            public jumpgateService: JumpgateService,
 	            public dbService: DBService) {
 		this.accountService.agent$.subscribe((agent) => {
 			// once we've got an agent, we can load our ships
@@ -130,7 +132,10 @@ export class FleetService implements OnInit {
 		this.allShipsSubject.next(currentShips); // Emit the updated array
 		// If this ship is moving, track its movement:
 		let withinSystem: System | undefined | null = null;
-		if (ship.nav.route.origin.systemSymbol == ship.nav.route.destination.systemSymbol) {
+		const arrival = new Date(ship.nav.route.arrival);
+
+		if (ship.nav.route.origin.systemSymbol == ship.nav.route.destination.systemSymbol ||
+			Date.now() > arrival.getTime()) {
 			withinSystem = this.galaxyService.getSystemBySymbol(ship.nav.route.destination.systemSymbol);
 		}
 		this.eventQueueService.trackMovement(ship, withinSystem, (system: string, shipLoc: LocXY) => {
@@ -420,7 +425,20 @@ export class FleetService implements OnInit {
 				ship.nav = response.data.nav;
 				this.setShipLocation(ship, ship.nav.systemSymbol, response.data.nav.route.destination)
 			}
-		}, (error) => {});
+		}, (error) => {
+			while (error.error) {
+				error = error.error;
+			}
+			if (error.message.toLowerCase().includes(' is under construction.')) {
+				this.jumpgateService.reportJumpgateUnderConstruction(waypointSymbol);
+			}
+			if (error.message.toLowerCase().includes('trade good antimatter is not available at')) {
+				const ship = this.getShipBySymbol(shipSymbol);
+				if (ship) {
+					this.jumpgateService.reportJumpgateUnderConstruction(ship.nav.waypointSymbol);
+				}
+			}
+		});
 		return observable;
 	}
 

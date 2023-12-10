@@ -82,35 +82,39 @@ export class MarketService {
 		return marketItems;
 	}
 	recordTransfer(fromShip: Ship, toShip: Ship, itemSymbol: string, units: number) {
-		let averagePrice = this.getAverageCost(fromShip.nav.waypointSymbol, itemSymbol, 'SELL');
-		const frameFrom = fromShip.frame.name.toLowerCase();
+		let sellPrice = this.getLowestSellPrice(fromShip.nav.waypointSymbol, itemSymbol);
+/*		const frameFrom = fromShip.frame.name.toLowerCase();
 		const frameTo = toShip.frame.name.toLowerCase();
 		if (frameTo.includes('freighter') && frameFrom.includes('drone')) {
 			// When transfering from a mining drone to a freighter, split the sell price
-			// so each ship gets partial credit for the proceeds.
-			averagePrice = averagePrice / 2;
-		}
+			// so each gets half the profit
+			sellPrice = sellPrice / 2;
+		} */
 
 		const marketTransaction1 = new MarketTransaction();
 		marketTransaction1.shipSymbol = toShip.symbol;
 		marketTransaction1.waypointSymbol = fromShip.symbol;
 		marketTransaction1.tradeSymbol = itemSymbol;
-		marketTransaction1.pricePerUnit = averagePrice;
+		marketTransaction1.pricePerUnit = sellPrice;
 		marketTransaction1.units = units;
 		marketTransaction1.timestamp = new Date().toISOString();
-		marketTransaction1.totalPrice = averagePrice * units;
-		marketTransaction1.type = 'SELL';
+		marketTransaction1.totalPrice = sellPrice * units;
+		marketTransaction1.type = 'PURCHASE'; // the 'toShip' is buying from the 'fromShip'
+
 		const marketTransaction2 = new MarketTransaction();
 		marketTransaction2.shipSymbol = fromShip.symbol;
 		marketTransaction2.waypointSymbol = toShip.symbol;
 		marketTransaction2.tradeSymbol = itemSymbol;
-		marketTransaction2.pricePerUnit = averagePrice;
+		marketTransaction2.pricePerUnit = sellPrice;
 		marketTransaction2.units = units;
 		marketTransaction2.timestamp = new Date().toISOString();
-		marketTransaction2.totalPrice = averagePrice * units;
-		marketTransaction2.type = 'PURCHASE';
+		marketTransaction2.totalPrice = sellPrice * units;
+		marketTransaction2.type = 'SELL'; // the 'fromShip' is selling to the 'toShip'
 		this.addToMarketTransactions([marketTransaction1, marketTransaction2]);
+		this.dbService.addMarketTransaction(marketTransaction1);
+		this.dbService.addMarketTransaction(marketTransaction2);
 	}
+	
 	private addToMarketTransactions(marketTransactionsArray: MarketTransaction[]) {
 		for (const marketTransaction of marketTransactionsArray) {
 			let marketTransactionsByTradeSymbol = this.marketTransactionsByTradeSymbolByWaypointSymbol.get(marketTransaction.waypointSymbol);
@@ -369,6 +373,17 @@ export class MarketService {
 		}
 		return Math.ceil(cost / pricesByWaypointSymbol.size);
 	}
+	getLowestSellPrice(systemSymbol: string, itemSymbol: string) {
+		systemSymbol = GalaxyService.getSystemSymbolFromWaypointSymbol(systemSymbol);
+		const pricesByWaypointSymbol = this.getPricesForItemInSystemByWaypointSymbol(systemSymbol, itemSymbol);
+		let sellPrice = Infinity;
+		for (let item of pricesByWaypointSymbol.values() || []) {
+			if (item.sellPrice < sellPrice) {
+				sellPrice = item.sellPrice;
+			}
+		}
+		return sellPrice;
+	}
 	
 	findCheapestMarketItemForSaleInSystem(fromWaypoint: WaypointBase, itemSymbol: string, unitsToBuy: number, excludeImportMarkets: boolean): UiMarketItem | null {
 		let bestMarketItem: UiMarketItem | null = null;
@@ -468,13 +483,11 @@ export class MarketService {
 	hasPriceData(marketSymbol: string): boolean {
 		const latestMarketItemByTradeSymbol = this.latestMarketItemByTradeSymbolByWaypointSymbol.get(marketSymbol);
 		if (latestMarketItemByTradeSymbol) {
-			const latestMarketItems: UiMarketItem[] = [];
 			let allHavePriceData = true;
 			let haveSomePriceData = false;
 			for (const itemSymbol of latestMarketItemByTradeSymbol.keys()) {
 				const latestMarketItem = latestMarketItemByTradeSymbol.get(itemSymbol);
 				if (latestMarketItem) {
-					latestMarketItems.push(latestMarketItem);
 					if (latestMarketItem.purchasePrice == 0) {
 						allHavePriceData = false;
 					} else {

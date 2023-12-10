@@ -40,19 +40,19 @@
 						<div cdkDropList class="draggable-list"
 							(cdkDropListDropped)="onDrop($event)">
 							<div cdkDrag [cdkDragData]="cargoItem" class="cargoItem"
-								*ngFor="let cargoItem of ship!.cargo.inventory"
+								*ngFor="let cargoItem of ship.cargo.inventory"
 								title="{{cargoItem.description}}">
 								{{cargoItem.symbol}} x{{cargoItem.units}}
 								<button *ngIf="showMount === 'true' && cargoItem.symbol.startsWith('MOUNT_') && (ship.frame.mountingPoints > ship.mounts.length)"
 								        (click)="onInstallMount(ship, cargoItem)">Install</button>
 							</div>
-							<div class='emptyCargoSpot'>Empty spaces
+							<div class='emptyCargoSpot' *ngIf="ship.cargo.capacity>0">Empty spaces
 								x{{ship.cargo.capacity - ship.cargo.units}}</div>
 						</div>
 					</td>
 					<td colspan="2">
 						<button *ngIf="showSurvey == 'true' && canSurvey(ship)" (click)="onCreateSurvey(ship)">Survey</button> <br *ngIf="canSurvey(ship)" />
-						<button *ngIf="showMine == 'true'" (click)="onMine(ship)">Mine</button>
+						<button *ngIf="showMine == 'true' && canMine(ship)" (click)="onMine(ship)">Mine</button>
 					</td>
 				</tr>
 			</table>

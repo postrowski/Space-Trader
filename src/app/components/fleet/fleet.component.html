@@ -21,11 +21,11 @@
 		</tr>
 	</table>
 <table>
-	<tr *ngFor="let ship of ships">
-		<td [ngClass]="{ 'selected-row': ship === selectedShip }"
+	<ng-container *ngFor="let ship of ships">
+		<ng-container
 			*ngIf="showShipType(ship) && ((showShips == 'All') || (showShipsAtSystem == null && ship.nav.systemSymbol == selectedSystem?.symbol) || ship.nav.systemSymbol == showShipsAtSystem)"
 			(click)="selectShip(ship)">
-			<app-ship [ship]="ship"></app-ship>
-		</td>
-	</tr>
+			<app-ship [ship]="ship" [selectedShip]="selectedShip"></app-ship>
+		</ng-container>
+	</ng-container>
 </table>

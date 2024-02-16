@@ -19,3 +19,10 @@ tr.centered-tds td {
 	white-space: nowrap;
 }
 
+td.ship-name {
+	min-width: 200px;
+}
+.selected-row {
+  background-color: darkslategray;
+  color: lightgrey;
+}

@@ -1,72 +1,70 @@
-<table *ngIf="ship" class="th-right">
-	<tr>
-		<td [title]="getShipPowerString(ship)">
-			{{ ship.symbol }}<br />
-			{{ship.frame.name.toUpperCase() }}&nbsp;&nbsp;
-			({{ship.registration.role.toLowerCase() }})
-		</td>
-		<td>
-			<app-countdown [title]="'Cooldown'" [cooldown]="ship.cooldown"></app-countdown>
-		</td>
-		<td>
-			<div *ngIf="ship.fuel">
-				<app-vertical-progress-bar [title]="'Fuel'" [value]="ship.fuel.current"
-						[maxValue]="ship.fuel.capacity"></app-vertical-progress-bar>
-			</div> 
-		</td>
-		<td>
-			<div *ngIf="ship.cargo" title="{{getShipInventory()}}">
-				<app-vertical-progress-bar [title]="'Cargo'" [value]="ship.cargo.units" [threshold]="0"
-					[maxValue]="ship.cargo.capacity"></app-vertical-progress-bar></div>
-		</td>
-		<td>
-			<div *ngIf="ship.nav.status === 'IN_ORBIT'">
-				Orbiting <span class="link"
-					(click)="onWaypointSymbolClick(ship.nav.waypointSymbol)">{{ship.nav.waypointSymbol}}</span>
-			</div>
-			<div *ngIf="ship.nav.status === 'DOCKED'">
-				Docked at <span class="link"
-					(click)="onWaypointSymbolClick(ship.nav.waypointSymbol)">{{ship.nav.waypointSymbol}}</span>
-			</div>
-			<div *ngIf="ship.nav.status === 'IN_TRANSIT'">
-				In-route <span class="link"
-					(click)="onWaypointSymbolClick(ship.nav.route.origin.symbol)">{{ship.nav.route.origin.symbol}}</span>
-				to <span class="link"
-					(click)="onWaypointSymbolClick(ship.nav.route.destination.symbol)">{{ship.nav.route.destination.symbol}}</span>
-				<app-countdown [startTimeStr]="ship.nav.route.departureTime"
-					[endTimeStr]="ship.nav.route.arrival"></app-countdown>
-			</div>
-			<div *ngIf="ship.fuel.capacity>0">Flight Mode:
-				<select [(ngModel)]="ship.nav.flightMode" (ngModelChange)="onShipFlightModeChange(ship)">
-					<option>DRIFT</option>
-					<option>STEALTH</option>
-					<option>CRUISE</option>
-					<option>BURN</option>
-				</select>
-			</div>
-		</td>
-		<td *ngIf="ship.nav">
-			<button *ngIf="ship.nav.status === 'DOCKED'" (click)="onOrbitShip(ship)">Orbit Ship</button>
-			<button *ngIf="ship.nav.status === 'IN_ORBIT'" (click)="onDockShip(ship)">Dock Ship</button>
-			<button *ngIf="hasSensor(ship)" (click)="onScanSystem(ship)">Scan System</button>
-			<button *ngIf="ship.fuel.capacity" (click)="onRefuel(ship)">Refuel</button>
-			<button *ngIf="canRefine(ship)" (click)="onRefine(ship)">Refine</button>
-			<button *ngIf="canSiphon(ship)" (click)="onSiphon(ship)">Siphon</button>
-		</td>
-		<td>
-			<span *ngFor="let module of ship.modules" class='module' 
+<tr *ngIf="ship" class="th-right" [ngClass]="{'selected-row': ship === selectedShip }">
+	<td [title]="getShipPowerString(ship)" class="ship-name">
+		{{ ship.symbol }}<br />
+		{{ship.frame.name.toUpperCase() }}&nbsp;&nbsp;
+		({{ship.registration.role.toLowerCase() }})
+	</td>
+	<td>
+		<app-countdown [title]="'Cooldown'" [cooldown]="ship.cooldown"></app-countdown>
+	</td>
+	<td>
+		<div *ngIf="ship.fuel">
+			<app-vertical-progress-bar [title]="'Fuel'" [value]="ship.fuel.current"
+					[maxValue]="ship.fuel.capacity"></app-vertical-progress-bar>
+		</div> 
+	</td>
+	<td>
+		<div *ngIf="ship.cargo" title="{{getShipInventory()}}">
+			<app-vertical-progress-bar [title]="'Cargo'" [value]="ship.cargo.units" [threshold]="0"
+				[maxValue]="ship.cargo.capacity"></app-vertical-progress-bar></div>
+	</td>
+	<td>
+		<div *ngIf="ship.nav.status === 'IN_ORBIT'">
+			Orbiting <span class="link"
+				(click)="onWaypointSymbolClick(ship.nav.waypointSymbol)">{{ship.nav.waypointSymbol}}</span>
+		</div>
+		<div *ngIf="ship.nav.status === 'DOCKED'">
+			Docked at <span class="link"
+				(click)="onWaypointSymbolClick(ship.nav.waypointSymbol)">{{ship.nav.waypointSymbol}}</span>
+		</div>
+		<div *ngIf="ship.nav.status === 'IN_TRANSIT'">
+			In-route <span class="link"
+				(click)="onWaypointSymbolClick(ship.nav.route.origin.symbol)">{{ship.nav.route.origin.symbol}}</span>
+			to <span class="link"
+				(click)="onWaypointSymbolClick(ship.nav.route.destination.symbol)">{{ship.nav.route.destination.symbol}}</span>
+			<app-countdown [startTimeStr]="ship.nav.route.departureTime"
+				[endTimeStr]="ship.nav.route.arrival"></app-countdown>
+		</div>
+		<div *ngIf="ship.fuel.capacity>0">Flight Mode:
+			<select [(ngModel)]="ship.nav.flightMode" (ngModelChange)="onShipFlightModeChange(ship)">
+				<option>DRIFT</option>
+				<option>STEALTH</option>
+				<option>CRUISE</option>
+				<option>BURN</option>
+			</select>
+		</div>
+	</td>
+	<td *ngIf="ship.nav">
+		<button *ngIf="ship.nav.status === 'DOCKED'" (click)="onOrbitShip(ship)">Orbit Ship</button>
+		<button *ngIf="ship.nav.status === 'IN_ORBIT'" (click)="onDockShip(ship)">Dock Ship</button>
+		<button *ngIf="hasSensor(ship)" (click)="onScanSystem(ship)">Scan System</button>
+		<button *ngIf="ship.fuel.capacity" (click)="onRefuel(ship)">Refuel</button>
+		<button *ngIf="canRefine(ship)" (click)="onRefine(ship)">Refine</button>
+		<button *ngIf="canSiphon(ship)" (click)="onSiphon(ship)">Siphon</button>
+	</td>
+	<td>
+		<span *ngFor="let module of ship.modules" class='module' 
 title='Symbol:     {{ module?.symbol }}
 Description: {{ module?.description }}
 Capacity:    {{ module?.capacity }}
 Range:       {{ module?.range }}'>
-				{{module.name }}</span>
-			<span class='empty module'>{{ ship.frame.moduleSlots - ship.modules.length }} empty modules</span><br />
-			<span *ngFor="let mount of ship.mounts" class='mount'
+			{{module.name }}</span>
+		<span class='empty module'>{{ ship.frame.moduleSlots - ship.modules.length }} empty modules</span><br />
+		<span *ngFor="let mount of ship.mounts" class='mount'
 title='Symbol:      {{ mount?.symbol }}
 Description: {{ mount?.description }}
 Strength:    {{ mount?.strength }}
 Deposits:    {{ mount?.deposits?.join(", ")}}'>{{mount.name}}</span>
-			<span class='empty mount'>{{ ship.frame.mountingPoints - ship.mounts.length }} empty mounts</span><br />
-		</td>
-	</tr>
-</table>
+		<span class='empty mount'>{{ ship.frame.mountingPoints - ship.mounts.length }} empty mounts</span><br />
+	</td>
+</tr>

@@ -18,8 +18,3 @@ td{
 	padding:3px;
 	margin:3px;
 }
-
-.selected-row {
-  background-color: darkslategray;
-  color: lightgrey;
-}

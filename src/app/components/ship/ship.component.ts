@@ -13,6 +13,7 @@ import { ShipMount } from 'src/models/ShipMount';
 })
 export class ShipComponent implements OnInit {
 	_ship: Ship | null = null;
+	@Input() selectedShip: Ship | null = null;
 	
 	@Input()
 	set ship(value: Ship | null) {
